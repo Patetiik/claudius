@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Claudius · Journal d’un mycélium</title>
+  <meta name="description" content="Jeu idle dans le navigateur : tu es une spore qui germe sous une forêt. Digère la litière, tisse ton réseau, pactise avec les arbres.">
+  <meta name="theme-color" content="#14100c">
+  <meta name="color-scheme" content="dark">
+  <link rel="manifest" href="manifest.webmanifest?v=8.0">
+  <link rel="icon" href="icons/icon.svg?v=8.0" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png?v=8.0" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=8.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Claudius">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <!-- Partage (messageries, réseaux) -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:title" content="Claudius · Journal d’un mycélium">
+  <meta property="og:description" content="Jeu idle : tu es une spore qui germe sous une forêt. Tisse ton réseau et deviens le plus grand être vivant du monde.">
+  <meta property="og:url" content="https://patetiik.github.io/claudius/">
+  <meta property="og:image" content="https://patetiik.github.io/claudius/icons/icon-512.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="stylesheet" href="css/style.css?v=8.0">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M4 15c0-6 5.5-10 12-10s12 4 12 10c0 1.2-1 2-2.2 2H6.2C5 17 4 16.2 4 15z" fill="currentColor"/>
+        <path d="M13 17h6l1.2 9.5c.1.8-.5 1.5-1.3 1.5h-5.8c-.8 0-1.4-.7-1.3-1.5z" fill="currentColor" opacity=".55"/>
+        <circle cx="11" cy="11" r="1.4" fill="var(--bg)"/><circle cx="19.5" cy="9.5" r="1.1" fill="var(--bg)"/><circle cx="23" cy="13" r=".9" fill="var(--bg)"/>
+      </svg>
+      <div><div class="wordmark">Claudius</div><div class="tagline">Journal d’un mycélium · v8</div></div>
+    </div>
+    <div class="season" id="season">
+      <span id="season-name">Printemps</span>
+      <div class="bar"><div id="season-bar"></div></div>
+    </div>
+    <div class="top-actions">
+      <button id="btn-save" class="ghost" title="Sauvegarder la partie">Sauver</button>
+      <button id="btn-reset" class="ghost danger" title="Effacer la partie">Effacer</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="left">
+      <div class="resources">
+        <div class="res-main">
+          <div class="res-value" id="nutrients">0</div>
+          <div class="res-label">nutriments</div>
+          <div class="res-rate"><span id="nps">0</span> /s</div>
+        </div>
+        <div class="res-side">
+          <div id="species-box" class="muted small"></div>
+          <div id="chal-box" class="hidden chal-banner">
+            <div><span id="chal-name"></span> · <span id="chal-pct">0</span> %</div>
+            <div class="progress"><div id="chal-bar"></div></div>
+            <button id="btn-abandon" class="small-btn">Abandonner</button>
+          </div>
+          <div id="sugar-box" class="hidden stat-line"><span class="dot sugar-dot"></span><strong id="sugar">0</strong> sucre <span class="muted">+<span id="sugar-rate">0</span>/s</span></div>
+          <button id="btn-water" class="hidden water">Arroser · <span id="water-cost">0</span> sucre</button>
+          <div id="rival-box" class="hidden rival-banner">
+            <div>Colonie rivale · <span id="rival-hp">0</span> · <span id="rival-left">0</span> s</div>
+            <div class="progress"><div id="rival-bar"></div></div>
+            <div class="small muted">Clique le réseau pour la repousser</div>
+          </div>
+          <div id="flush-box" class="hidden flush-banner">
+            <div><span class="dot shroom-dot"></span>Carpophores · <span id="flush-left">0</span> à cueillir · <span id="flush-time">0</span> s</div>
+            <div class="small muted">Les grands champignons clairs, à la surface</div>
+          </div>
+          <div id="amber-box" class="hidden stat-line"><span class="dot amber-dot"></span><strong id="amber">0</strong> ambre <span class="muted">×<span id="amber-bonus">1</span></span></div>
+          <div id="spores-box" class="hidden stat-line"><span class="dot spore-dot"></span><strong id="spores">0</strong> spores <span class="muted">+<span id="spore-bonus">0</span> %</span></div>
+          <div id="buffs"></div>
+        </div>
+      </div>
+      <div class="network-wrap">
+        <canvas id="network"></canvas>
+        <div class="network-hint" id="hint">Clique sur le cœur de Claudius pour digérer la litière</div>
+        <div id="floaters"></div>
+      </div>
+      <div class="plate-caption"><span>Pl. I</span> — Réseau de <em>Claudius</em>, coupe du sol forestier</div>
+      <div class="log" id="log"></div>
+    </section>
+
+    <section class="right">
+      <nav class="tabs">
+        <button data-tab="gens" class="active">Réseau</button>
+        <button data-tab="upgrades">Évolutions <span class="badge hidden" id="upg-badge"></span></button>
+        <button data-tab="achievements">Jalons</button>
+        <button data-tab="prestige" id="tab-prestige">Sporulation <span class="badge hidden" id="talent-badge"></span></button>
+        <button data-tab="amber">Ambre <span class="badge hidden" id="relic-badge"></span></button>
+        <button data-tab="stats">Carnet</button>
+      </nav>
+
+      <div class="tab-panel active" id="tab-gens">
+        <div class="buy-mode"><span>Acheter</span>
+          <button data-mode="1" class="active">×1</button>
+          <button data-mode="10">×10</button>
+          <button data-mode="100">×100</button>
+          <button data-mode="max">Max</button>
+        </div>
+        <div id="gen-list"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-upgrades">
+        <div id="upg-list" class="upg-grid"></div>
+        <p class="muted small" id="upg-empty">Continue de grandir : de nouvelles évolutions apparaîtront.</p>
+        <div class="sugar-section">
+          <h3>Évolutions sucrées</h3>
+          <p class="muted small" id="sugar-hint">Les arbres te paient en sucre. Ces évolutions sont perdues à la sporulation.</p>
+          <div id="sugar-list" class="upg-grid"></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-achievements">
+        <p class="muted small">Chaque jalon atteint donne +2 % de production.</p>
+        <div id="ach-list" class="ach-grid"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-prestige">
+        <div class="prestige-card">
+          <h2>Sporulation</h2>
+          <p>Claudius fait éclore un immense carpophore et libère ses spores dans le vent.
+            Le réseau actuel disparaît, mais chaque spore germera dans une nouvelle forêt :
+            <strong>+5 % de production par spore</strong>, pour toujours.
+            Les spores suivent la racine 4ᵉ des nutriments du cycle (16× plus de nutriments pour 2× plus de spores).</p>
+          <p>Spores gagnées en sporulant maintenant : <strong id="prestige-gain">0</strong></p>
+          <div class="progress"><div id="prestige-bar"></div></div>
+          <p class="muted small">Prochaine spore : <span id="prestige-have">0</span> / <span id="prestige-next">?</span> nutriments sur ce cycle.</p>
+          <button id="btn-prestige" class="big">Sporuler</button>
+        </div>
+        <div class="talents-head">
+          <h3>Espèce du prochain cycle</h3>
+        </div>
+        <p class="muted small">Appliquée à ta prochaine sporulation (ou au lancement d’un défi). Chaque espèce change ta façon de jouer.</p>
+        <div id="species-list" class="species-grid"></div>
+
+        <div class="talents-head">
+          <h3>Arbre de spores</h3>
+          <div><strong id="spores-avail">0</strong> spore(s) à dépenser</div>
+        </div>
+        <p class="muted small">Les talents sont permanents. Les spores dépensées comptent toujours pour le bonus de production.</p>
+        <div class="tree-wrap">
+          <div id="talent-tree" class="talent-tree"></div>
+          <div class="tree-teaser hidden" id="tree-teaser">Sporule une première fois pour gagner des spores et débloquer l’arbre.</div>
+        </div>
+
+        <div class="talents-head">
+          <h3>Défis</h3>
+          <div class="small"><strong id="chal-done-count">0</strong> / <span id="chal-total"></span> réussis</div>
+        </div>
+        <p class="muted small">Lancer un défi fait sporuler (tu gardes les spores gagnées). Atteins l’objectif sur ce cycle pour une récompense permanente.</p>
+        <div class="tree-wrap">
+          <div id="chal-list" class="chal-list"></div>
+          <div class="tree-teaser hidden" id="chal-teaser">Sporule une première fois pour débloquer les défis.</div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-amber">
+        <div class="prestige-card amber-card">
+          <h2>Ambre</h2>
+          <p>Au fil des sporulations, une partie de tes spores tombe dans la résine des vieux arbres et s’y fige.
+            Rien n’est perdu, rien n’est remis à zéro : chaque éclat d’ambre donne
+            <strong>+25 % de production</strong>, pour toujours, et se dépense en reliques.</p>
+          <p>Ambre : <strong id="fossil-gain">0</strong></p>
+          <div class="progress"><div id="fossil-bar"></div></div>
+          <p class="muted small">Prochain ambre : <span id="fossil-have">0</span> / <span id="fossil-next">?</span> spores gagnées. Il se forme tout seul à la sporulation.</p>
+        </div>
+        <div class="talents-head">
+          <h3>Reliques</h3>
+          <div><strong id="amber-avail">0</strong> ambre à dépenser</div>
+        </div>
+        <p class="muted small">Les reliques sont permanentes et survivent aux sporulations. L’ambre dépensé compte toujours pour le bonus.</p>
+        <div class="tree-wrap">
+          <div id="relic-list" class="upg-grid relic-grid"></div>
+          <div class="tree-teaser hidden" id="relic-teaser">Gagne <strong id="fossil-unlock"></strong> spores au total pour former ton premier ambre.</div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-stats">
+        <table class="stats" id="stats"></table>
+        <div class="save-box">
+          <h3>Sauvegarde</h3>
+          <p class="muted small">Copie ce code pour garder ta partie ailleurs ou la passer sur un autre navigateur.</p>
+          <textarea id="save-text" rows="4" spellcheck="false" placeholder="Colle ici un code de sauvegarde pour l’importer"></textarea>
+          <div class="save-actions">
+            <button id="btn-export">Exporter</button>
+            <button id="btn-download">Télécharger (.txt)</button>
+            <button id="btn-import">Importer</button>
+          </div>
+          <div class="small" id="save-msg"></div>
+          <p class="muted small">Ta partie est gardée dans ce navigateur, sur cet appareil. Pour la retrouver ailleurs, exporte ce code.
+            Sur Safari (iPhone, iPad, Mac), un site qu’on n’ouvre pas pendant une semaine peut être effacé : garde un code de côté, ou ajoute le jeu à l’écran d’accueil.</p>
+          <h3>Sauvegarde de secours</h3>
+          <p class="muted small">Le jeu garde à part ta partie la plus avancée. Elle n’est jamais remplacée par une partie moins avancée, même après « Effacer ».</p>
+          <div class="small" id="backup-info">Aucune pour l’instant.</div>
+          <div class="save-actions"><button id="btn-restore" disabled>Restaurer le secours</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal hidden" id="modal">
+    <div class="modal-box">
+      <div id="modal-content"></div>
+      <button id="modal-ok" class="big">Continuer</button>
+    </div>
+  </div>
+
+  <script src="js/util.js?v=8.0"></script>
+  <script src="js/data.js?v=8.0"></script>
+  <script src="js/game.js?v=8.0"></script>
+  <script src="js/network.js?v=8.0"></script>
+  <script src="js/ui.js?v=8.0"></script>
+  <script src="js/main.js?v=8.0"></script>
+</body>
+</html>

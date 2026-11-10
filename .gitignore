@@ -1,0 +1,9 @@
+# Fichiers de travail, jamais publiés
+CLAUDE.md
+TEST-IPHONE.md
+.claude/
+demo.html
+.env
+.env.*
+.DS_Store
+*.bak

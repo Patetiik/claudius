@@ -1,0 +1,173 @@
+# 🍄 Claudius — idle mycélien
+
+Tu es **Claudius**, une spore qui germe sous une forêt. Digère la litière, tisse ton réseau,
+pactise avec les arbres et deviens le plus grand être vivant du monde.
+
+## Jouer
+En ligne : **https://patetiik.github.io/claudius/** (ordinateur, Android, iPhone, tablette).
+
+En local : ouvrir `index.html` dans un navigateur (aucune dépendance, aucun build),
+ou servir le dossier : `python3 -m http.server 8765 --bind 127.0.0.1`.
+
+## Mécaniques
+- **Clic** sur le réseau → nutriments.
+- **11 générateurs** (Hyphe → Noosphère fongique), découverts progressivement.
+- **Saisons** (90 s chacune) qui boostent ou freinent certains générateurs.
+- **Gouttes de pluie 💧** aléatoires : ondée (×3), flaque (gain instantané) ou orage (clic ×15).
+- **Évolutions** : ×2/×3 par générateur, clic en % de la prod, bonus globaux.
+- **Jalons** (41 en v6) : +2 % de production chacun.
+- **Sporulation** (prestige, dès 1 M) : spores = (total du cycle / 1 M)^¼, +5 % chacune (racine carrée avant la v6).
+- Sauvegarde auto (localStorage, 10 s) + gains hors-ligne (50 %, 8 h max).
+
+## Nouveautés v2
+- **Arbre de spores** (onglet Sporulation) : 11 talents permanents en 3 branches
+  (🌿 Croissance, 🦷 Digestion, 🌦️ Climat), achetés avec les spores.
+  Les spores dépensées **continuent de compter** pour le bonus de +5 %.
+- **Export / import** de la sauvegarde (onglet Stats) : code texte `CLAUDIUS2:…`,
+  copie dans le presse-papiers ou fichier `.txt`. Un code invalide ne touche pas à la partie.
+- 2 nouveaux jalons (Héritage, Arbre de vie). Les sauvegardes v1 se chargent telles quelles.
+
+## Nouveautés v3
+- **🍯 Sucre**, 2ᵉ ressource : les mycorhizes (0,1/s), le Wood Wide Web (0,5/s) et le mycélium
+  continental (2/s) échangent ton phosphore contre le sucre des arbres. Été ×2, hiver ×0,3.
+  Remis à zéro à chaque sporulation.
+- **7 évolutions sucrées** (onglet Évolutions, aperçu grisé avant la 1ʳᵉ mycorhize) :
+  Échange équitable, Sève sucrée, Appât sucré, Réserves d’amidon, Fermentation (bonus selon le sucre
+  en réserve), Nectar lumineux, Symbiose totale.
+- **🐗 Sanglier truffier** (dès la 1ʳᵉ mycorhize, toutes les 2,5–5 min) : il traverse la surface ;
+  clique-le pour un gros gain immédiat et une production ×2 pendant 45 s.
+- **☀️ Sécheresse** (50 % de chance en été, 15 % en automne) : production ×0,5, sucre ×0,5 et plus de
+  pluie pendant 45 s. Le bouton **💦 Arroser** y met fin contre du sucre.
+- **Surface redessinée** : ciel et astre selon la saison, forêt lointaine, herbe/neige, humus,
+  vrais arbres (3 en décor dès le début), racines dorées où descend le sucre des arbres pactisés,
+  feuilles mortes en automne, neige en hiver.
+- 5 nouveaux jalons. Sauvegardes et codes v2 compatibles (codes d’export `CLAUDIUS3:…`).
+
+## Nouveautés v4
+- **🧬 Espèces** (onglet Sporulation) : on choisit l’espèce du prochain cycle, appliquée à la sporulation.
+  - 🍄 Claudius commun — équilibré.
+  - 🟤 Armillaire obscure — inactif : production ×2, clic ×0,25.
+  - 🦪 Pleurote carnivore — actif : clic ×4 et +5 % de la prod par clic, production ×0,6.
+  - 🟣 Laccaire améthyste — sucre : sucre ×3, mycorhizes ×2, hyphes/rhizomorphes ×0,5 (jalon « Dent sucrée »).
+  - ⚫ Truffe noire — événements : sanglier 3× plus fréquent et 2× plus rentable, pluie 2× plus rare
+    (jalon « Truffe ! » + 3 sporulations).
+- **⚔️ 5 défis** (après la 1ʳᵉ sporulation) : lancer un défi fait sporuler (spores gagnées conservées) ;
+  atteindre l’objectif sur le cycle donne une récompense permanente. Abandon possible à tout moment.
+  - 🤐 Sans dents (1 M) — clics inutiles → production +10 %.
+  - 🧵 Filament solitaire (2 M) — seuls les 3 premiers générateurs → ces 3 générateurs ×3.
+  - ❄️ Hiver éternel (5 M) — saison bloquée en hiver → l’hiver ne pénalise plus.
+  - 🏜️ Désert (10 M) — sécheresse permanente → immunité aux sécheresses.
+  - 🫥 Sans mémoire (50 M) — spores et talents désactivés → +1 % par spore.
+- 3 nouveaux jalons. Sauvegardes et codes v2/v3 compatibles (codes d’export `CLAUDIUS4:…`).
+
+## Nouveautés v5 (visuelle)
+- **Réseau identique au rechargement** : la sauvegarde garde une graine et l’ordre des branches
+  (`netSeed`, `netLog`) ; le dessin est rejoué à l’identique. Nouvelle graine à chaque sporulation.
+  Les anciennes sauvegardes reçoivent leur journal au premier chargement, puis restent stables.
+- **Réseau plus fin, même DA** : filaments courbes qui s’épaississent vers le cœur, halo lumineux,
+  pointes de croissance claires, impulsions en comètes, cœur organique qui respire, sol texturé
+  (strates, cailloux). Le réseau est pré-rendu sur un calque et redessiné seulement quand il change.
+- **Interface « carnet de naturaliste »** : typographie à empattements, registre à filets pour les
+  générateurs, onglets soulignés, cadre gravé autour de la planche du réseau avec légende,
+  boutons sobres, bien moins d’emojis décoratifs. Onglet « Stats » renommé « Carnet ».
+
+## Nouveautés v6 — l’ère de l’ambre
+- **3 générateurs de fin de partie** après le Mycélium continental, avec leurs 5 évolutions chacun :
+  Lichen pionnier (aime l’hiver, donne du sucre), Mycélium abyssal (insensible aux saisons),
+  Noosphère fongique (beaucoup de sucre). À la surface : rochers couverts de lichen, lueur vert d’eau
+  au fond de la planche, aurore dans le ciel.
+- **Ambre**, sans remise à zéro (onglet **Ambre**, en aperçu grisé jusqu’à 200 spores) : les spores gagnées
+  se figent d’elles-mêmes en ambre, ambre = √(spores gagnées / 200), mis à jour à chaque sporulation.
+  Chaque ambre donne **+25 % de production** (l’ambre dépensé compte toujours) et se dépense en reliques.
+  Une première version avec « Fossilisation » (tout remettre à zéro contre de l’ambre) a été retirée :
+  l’idle doit pouvoir progresser sans sacrifice.
+- **8 reliques** achetées avec l’ambre : Banque de graines (cycles qui démarrent avec 25 hyphes, 25 rhizomorphes, 10 champignons de litière), **Instinct** (achat auto des évolutions),
+  **Croissance autonome** (achat auto des générateurs), Résine (+50 % de spores), Mémoire des saisons,
+  Sève fossile, Gardien du sous-bois, Conscience planétaire (×3).
+- **Colonie rivale** (dès le 1ᵉʳ Wood Wide Web, toutes les 4–8 min **de jeu actif** : seulement si tu as cliqué
+  dans la dernière minute ; laissé seul, le jeu ne perd rien) : un mycélium violet rampe depuis un
+  bord de la planche et vole 25 % de la production. 30 clics sur le réseau en 45 s pour la repousser :
+  gros gain et production ×1,5 pendant 90 s.
+- **Poussée de carpophores** (60 % des automnes, après la 1ʳᵉ sporulation) : 7 petits champignons
+  sortent de terre, à cueillir pendant 22 s.
+- 3 talents profonds (Colonisation, Mycophagie, Aurore), 2 évolutions sucrées (Photobionte, Marée de sève),
+  2 évolutions globales, 10 jalons.
+- **Rééquilibrage** testé au simulateur (bot de 30 h, actif et inactif). Avec la racine carrée, les spores
+  s’emballaient dès le Mycélium continental (×10 000 en 20 min). En racine 4ᵉ et avec des générateurs de fin
+  de partie plus chers, un bot optimal (2 clics/s) atteint le Mycélium continental vers 1 h 10, le Lichen
+  vers 1 h 40 et la Noosphère vers 2 h ; un joueur inactif vers 1 h 40, 2 h 30 et 3 h. Ensuite la
+  croissance ralentit nettement et plafonne (pas de débordement vers l’infini).
+- **Mobile (retours du test iPhone)** : plus de zoom quand on tape vite ; la barre d’onglets ne défile
+  qu’horizontalement ; quand Safari met la page en veille, le retour compte comme du hors-ligne
+  (50 %, 8 h max) et affiche la fenêtre « Bon retour », au lieu d’un rattrapage silencieux.
+- **Correctifs** : la planche ne reste plus vide si la page s’ouvre dans un onglet caché ; numéro de version
+  dans les liens des scripts (`?v=6.3`) pour que le navigateur ne mélange pas anciens et nouveaux fichiers.
+- Sauvegardes et codes v1–v5 compatibles (codes d’export `CLAUDIUS6:…`). Les spores déjà gagnées
+  sont conservées ; seules les prochaines suivent la nouvelle formule.
+
+## Nouveautés v7 — lisibilité de la surface
+- **Carpophores à cueillir** (poussée d’automne) : grands champignons au chapeau ivoire lumineux, halo qui
+  pulse à leur pied, léger balancement. Zone de toucher de 44 px, confortable au doigt sur tous les écrans.
+  Une annotation de carnet « carpophores — à cueillir » apparaît quelques secondes au début de la poussée,
+  et un encart sous les ressources indique combien il en reste et le temps restant.
+- **Champignons de litière** : redevenus un simple décor, petits, ocre-brun, sans éclat, groupés en touffes
+  au pied de l’herbe. On ne les confond plus avec les carpophores.
+- **Rochers de lichen** plus visibles : plus gros, pierre claire éclairée par la lune avec arête lumineuse,
+  contour et ombre portée ; croûtes de lichen en rosettes vert pâle et jaune orangé, plus vives en hiver,
+  avec un peu de neige sur le dessus. Placés entre les arbres.
+- Aucun changement de sauvegarde : les parties et codes v6 se chargent tels quels.
+
+## Nouveautés v8 — jouable par tout le monde
+Lot technique, sans nouveau contenu ni changement de gameplay.
+- **En ligne** sur GitHub Pages (HTTPS). Chemins tous relatifs : le jeu marche à la racine d’un site comme dans un sous-dossier.
+- **Toujours la dernière version** : un service worker (`sw.js`) prend d’abord les fichiers du serveur (revalidés à chaque
+  ouverture) et n’utilise sa copie que hors connexion ou si le réseau met plus de 4 s à répondre. Les `?v=…` restent en
+  plus dans les liens des scripts et du CSS.
+- **Jouable hors connexion** et **installable** comme une application (manifeste, icônes, écran d’accueil sur iPhone
+  et Android, application sur ordinateur via Chrome ou Edge).
+- **Une partie par joueur** : chaque personne a sa sauvegarde dans son navigateur (localStorage, propre à chaque site
+  et à chaque appareil). Rien n’est envoyé sur Internet. Pour changer d’appareil, on passe par l’export / import
+  (codes `CLAUDIUSn:`, toujours compatibles v1 à v7). La partie jouée sur `localhost` ne se retrouve pas d’elle-même en
+  ligne : l’exporter depuis le Carnet en local puis l’importer sur le site.
+- **Un seul onglet actif** : si le jeu s’ouvre dans un 2ᵉ onglet du même navigateur, le 1ᵉʳ se met en pause et
+  n’écrit plus rien (« Partie ouverte ailleurs », bouton « Jouer ici »). Avant, les deux onglets s’écrasaient.
+- Le bac à sable `?sandbox=<nom>` et les sauvegardes de secours (`…:backup`, `…:corrupt`) marchent pareil en ligne,
+  séparément pour chaque joueur.
+- **Stockage** : avertissement si le navigateur ne garde pas la partie (navigation privée stricte) ; Chrome, Edge et le
+  jeu installé demandent un stockage persistant ; une note dans le Carnet rappelle que Safari peut effacer un site
+  non ouvert pendant une semaine.
+- **Tous les écrans** : téléphone en paysage (deux colonnes qui défilent), encoches (`safe-area`), très petits écrans
+  (320 px), planche plus haute sur tablette en portrait, pas de zoom en touchant le champ de code sur mobile, pas de
+  menu « copier » sur un appui long, pas de « tirer pour recharger » sur Android ; sur ordinateur, la page ne défile
+  plus de 4 px.
+- **Arrière-plan sur mobile** : sauvegarde aussi à `pagehide` (fermeture d’onglet sur iPhone et Android), en plus du
+  passage en arrière-plan.
+- Métadonnées de partage (aperçu dans les messageries) et icône d’onglet.
+- Testé : Chrome (ordinateur et émulation mobile tactile, 8 tailles d’écran de 320 px à 1440 px, portrait et paysage),
+  hors connexion, deux onglets, sauvegardes v1, v7 et codes `CLAUDIUS2:`/`CLAUDIUS6:`. Pas encore testé sur un vrai
+  Firefox, Safari ou Android.
+
+## Publier une mise à jour
+1. Modifier le jeu, le tester en local sur `http://127.0.0.1:8765/?sandbox=test`.
+2. Changer le numéro de version (sinon les joueurs peuvent garder l’ancienne version en cache) :
+   `./nouvelle-version.sh 8.1` (met à jour les `?v=` de `index.html` et `VERSION` dans `sw.js`).
+3. Publier : `git add -A && git commit -m "v8.1 : …" && git push`. Le site est à jour en une à deux minutes.
+   `.gitignore` garde hors ligne les fichiers de travail (`CLAUDE.md`, `TEST-IPHONE.md`, `.claude/`).
+4. Vérifier sur https://patetiik.github.io/claudius/?sandbox=test (jamais sur ta vraie partie).
+
+## Structure
+- `js/data.js` — tout le contenu (générateurs, saisons, évolutions, jalons, talents, sucre, événements, ambre et reliques) : c'est ici qu'on ajoute.
+- `js/game.js` — logique pure et sauvegarde.
+- `js/network.js` — rendu canvas du réseau.
+- `js/ui.js`, `js/main.js` — interface et boucles.
+- `index.html` — page unique ; à chaque version, lancer `./nouvelle-version.sh` (voir ci-dessus).
+- `sw.js`, `manifest.webmanifest`, `icons/` — hors connexion et installation (v8).
+
+## Feuille de route
+- ~~v2 : boutique de spores (arbre de talents permanent), export/import de sauvegarde.~~ ✅
+- ~~v3 : 2ᵉ ressource **Sucre** (via mycorhizes) pour des évolutions spéciales ; événements « Sanglier truffier », « Sécheresse ».~~ ✅
+- ~~v4 : espèces de champignons à choisir à chaque sporulation (styles de jeu différents), défis.~~ ✅
+- ~~v5 (visuelle) : réseau identique au rechargement ; réseau plus beau en gardant la DA ; interface plus artisanale, moins « générée ».~~ ✅
+- ~~v6 : fin de partie (3 générateurs), ambre et reliques (sans remise à zéro), événements « Colonie rivale » et « Poussée de carpophores », rééquilibrage des spores.~~ ✅
+- ~~v7 : lisibilité de la surface : carpophores à cueillir bien distincts des champignons de litière, rochers de lichen plus visibles ; retours de Nicolas après test en jeu réel et sur iPhone (rien à signaler).~~ ✅
+- ~~v8 : jeu jouable par d’autres personnes, sur n’importe quel appareil (pas seulement iPhone) : hébergement public, navigateurs et écrans variés (ordinateur, Android, tablette), sauvegarde propre à chaque joueur.~~ ✅
