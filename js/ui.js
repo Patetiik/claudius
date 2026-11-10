@@ -42,39 +42,34 @@ const UI = {
       };
     });
 
-    $('btn-prestige').addEventListener('click', () => {
-      const gain = Game.prestigeGain();
-      if (gain < 1) return;
-      const sp = SPECIES.find(x => x.id === Game.s.nextSpecies);
-      if (!confirm(t('pre.confirm', { n: gain, icon: sp.icon, name: sp.name }))) return;
-      Game.prestige();
-    });
-
-    // Espèces (V4)
+    // Espèces (V4) : mutation à tout moment, une fois par saison (V11)
     this.speciesNodes = {};
     SPECIES.forEach(sp => {
       const d = el('div', 'species', `<div class="name"><span class="glyph">${sp.icon}</span><span class="tx"></span></div>
         <div class="style small"></div><div class="desc"></div>`);
-      d.addEventListener('click', () => { if (Game.chooseSpecies(sp.id)) this.update(); });
+      d.setAttribute('role', 'button');
+      d.tabIndex = 0;
+      const go = () => {
+        if (Game.s.species === sp.id || !Game.speciesUnlocked(sp) || !Game.canMutate()) return;
+        if (!confirm(t('pre.mutateConfirm', { icon: sp.icon, name: sp.name }))) return;
+        if (Game.mutate(sp.id)) this.update();
+      };
+      d.addEventListener('click', go);
+      d.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
       $('species-list').appendChild(d);
       this.speciesNodes[sp.id] = { d, style: d.querySelector('.style'), name: d.querySelector('.tx'), desc: d.querySelector('.desc') };
     });
 
-    // Défis (V4)
+    // Planches d'épreuve (V11, d'après les défis de la V4) : elles poussent à côté du réseau principal
     this.chalNodes = {};
     CHALLENGES.forEach(c => {
-      const d = el('div', 'chal', `<div class="chal-head"><div class="name"><span class="glyph">${c.icon}</span><span class="tx"></span></div><button></button></div>
+      const d = el('div', 'chal', `<div class="chal-head"><div class="name"><span class="glyph">${c.icon}</span><span class="tx"></span></div><button type="button"></button></div>
         <div class="desc rule"></div>
         <div class="desc goal"></div>
         <div class="reward small"></div>`);
       const btn = d.querySelector('button');
       btn.addEventListener('click', () => {
-        const gain = Game.prestigeGain();
-        const sp = SPECIES.find(x => x.id === Game.s.nextSpecies);
-        const msg = t('chal.confirm', { name: c.name, icon: sp.icon, sp: sp.name,
-          gain: gain >= 1 ? t('chal.confirmGain', { n: gain }) : t('chal.confirmNoGain') });
-        if (!confirm(msg)) return;
-        Game.startChallenge(c.id);
+        if (Game.startTrial(c.id)) { this.openPlate(); this.update(); }
       });
       $('chal-list').appendChild(d);
       this.chalNodes[c.id] = { d, btn, name: d.querySelector('.tx'), rule: d.querySelector('.rule'),
@@ -82,10 +77,21 @@ const UI = {
     });
     $('btn-abandon').addEventListener('click', () => {
       if (!confirm(t('chal.abandonConfirm'))) return;
-      Game.abandonChallenge();
+      Game.abandonTrial();
       this.update();
     });
-    $('modal-ok').addEventListener('click', () => { $('modal').classList.add('hidden'); setTimeout(() => this.pumpNotes(), 600); });
+    // L'encart sous les ressources mène à la planche
+    const toPlate = () => { document.querySelector('.tabs button[data-tab="prestige"]').click(); $('plate-panel').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+    $('chal-box').addEventListener('click', toPlate);
+    $('chal-box').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toPlate(); } });
+    this.initPlate();
+    $('modal-ok').addEventListener('click', () => {
+      $('modal').classList.add('hidden');
+      const next = this.modalQueue.shift();
+      if (next) { this._modalGap = true; setTimeout(() => { this._modalGap = false; this.modal(next); }, 250); }
+      else setTimeout(() => this.pumpNotes(), 600);
+    });
+    $('btn-legacy').addEventListener('click', () => this.showLegacy());
 
     // Arbre de talents
     const tree = $('talent-tree');
@@ -201,13 +207,18 @@ const UI = {
       : t('save.noBackup');
   },
 
+  // Fenêtres à la suite (V11 : la note de l'Héritage passe avant le « Bon retour »)
+  modalQueue: [],
+  queueModal(html) {
+    if (this.modalOpen()) this.modalQueue.push(html); else this.modal(html);
+  },
   modal(html) {
-    document.querySelector('.modal-box').classList.remove('cl-open');
+    document.querySelector('.modal-box').classList.remove('cl-open', 'legacy-open');
     $('modal-content').innerHTML = html;
     $('modal').classList.remove('hidden');
     Help.close();
   },
-  modalOpen() { return !$('modal').classList.contains('hidden'); },
+  modalOpen() { return !$('modal').classList.contains('hidden') || this.modalQueue.length > 0 || !!this._modalGap; },
 
   log(msg) {
     const box = $('log');
@@ -359,7 +370,7 @@ const UI = {
       const n = this.chalNodes[c.id];
       n.name.textContent = c.name;
       n.name.parentNode.dataset.done = t('chal.done');
-      n.rule.textContent = '⚖️ ' + c.rule;
+      n.rule.textContent = '⚖️ ' + c.ruleText;
       n.goal.textContent = t('chal.goal', { n: fmt(c.goal) });
       n.reward.textContent = '🏆 ' + c.reward;
     }
@@ -377,6 +388,8 @@ const UI = {
     if ($('sandbox-tag')) $('sandbox-tag').textContent = t('sandbox.tag', { name: SANDBOX });
     $('fossil-unlock').textContent = fmt(FOSSIL_UNLOCK);
     $('chal-total').textContent = CHALLENGES.length;
+    $('chal-teaser').textContent = t('pre.chalTeaser', { n: TRIAL_UNLOCK });
+    this.plateKey = null;
     if ($('news-text').innerHTML) this.updateNews();  // bandeau des nouveautés déjà construit : on le traduit
     this.upgKey = this.achKey = this.buffKey = this.notesKey = null;
     this._guideKey = null;
@@ -630,13 +643,13 @@ const UI = {
     $('flush-box').classList.toggle('hidden', !flOn);
     if (flOn) $('flush-text').textContent = t('res.flush', { n: fl.total - fl.picked, t: flLeft });
 
-    // Espèce et défi en cours
+    // Espèce et planche d'épreuve en cours
     const sp = Game.sp();
-    $('species-box').textContent = sp.id === 'commun' && !s.stats.prestiges ? '' : t('res.species', { name: sp.name });
-    const c = Game.chal();
+    $('species-box').textContent = sp.id === 'commun' && !s.spores ? '' : t('res.species', { name: sp.name });
+    const c = Game.trial();
     $('chal-box').classList.toggle('hidden', !c);
     if (c) {
-      const pct = Math.min(100, s.stats.totalEarned / c.goal * 100);
+      const pct = Math.min(100, Game.plate(c.id).earned / c.goal * 100);
       $('chal-name').textContent = t('res.chal', { name: c.name });
       $('chal-pct').textContent = fmt(pct, 1) + pctSign();
       $('chal-bar').style.width = pct + '%';
@@ -690,16 +703,6 @@ const UI = {
       r.icon.textContent = g.icon;
       r.name.firstChild.textContent = g.name;
       r.desc.textContent = g.desc;
-      if (Game.genBlocked(g.id)) {
-        r.row.classList.add('locked');
-        r.row.classList.remove('affordable', 'too-expensive');
-        r.desc.textContent = t('gens.blocked');
-        r.meta.textContent = '';
-        r.cost.textContent = '';
-        r.owned.textContent = s.gens[g.id] || '';
-        r.tag.textContent = '';
-        return;
-      }
       const n = this.buyMode === 'max' ? Math.max(1, Game.maxAffordable(g.id)) : this.buyMode;
       const cost = Game.costOf(g.id, n);
       const can = cost <= s.nutrients;
@@ -720,6 +723,7 @@ const UI = {
     this.updateAchievements();
     this.updatePrestige();
     this.updateAmber();
+    this.updatePlate();
     this.updateHerbarium();
     this.updateStats();
     this.updateGuide();
@@ -814,28 +818,26 @@ const UI = {
     const key = Object.keys(Game.s.achievements).join(',') + Settings.v.lang;
     if (key === this.achKey) return;
     this.achKey = key;
-    $('ach-list').innerHTML = ACHIEVEMENTS.map(a => {
+    // jalon exclusif (V11, Ancien des forêts) : seulement pour ceux qui l'ont
+    $('ach-list').innerHTML = ACHIEVEMENTS.filter(a => !a.exclusive || Game.s.achievements[a.id]).map(a => {
       const done = Game.s.achievements[a.id];
-      return `<div class="ach ${done ? 'done' : ''}"><div class="name">${a.name}</div><div class="desc">${a.desc}</div></div>`;
+      return `<div class="ach ${done ? 'done' : ''}${a.exclusive ? ' exclusive' : ''}"><div class="name">${a.name}</div><div class="desc">${a.desc}</div></div>`;
     }).join('');
   },
 
   updatePrestige() {
     const s = Game.s;
-    const gain = Game.prestigeGain();
-    const total = Game.s.stats.totalEarned;
-    const m = Game.sporeGainMult();
-    const prev = sporesNeeded(gain, m);
-    const next = sporesNeeded(gain + 1, m);
-    $('prestige-gain').textContent = fmt(gain);
-    $('prestige-have').textContent = fmt(total);
-    $('prestige-next').textContent = fmt(next);
-    $('prestige-bar').style.width = Math.min(100, (total - prev) / (next - prev) * 100) + '%';
+    const pr = Game.sporeProgress();
+    const per = Game.sporeBonusPer() * 100;
+    $('prestige-have-line').innerHTML = t('pre.have', { n: fmt(s.spores), p: fmt(s.spores * per) });
+    $('prestige-bar').style.width = (pr.pct * 100) + '%';
+    $('prestige-next-line').textContent = isFinite(pr.next)
+      ? t('pre.next', { a: fmt(pr.have), b: fmt(pr.next) }) : t('pre.capped');
+    $('prestige-fruit-line').textContent = t('pre.fruit', { n: fmt(s.nextFruit) });
     // Avant la toute première spore, l'arbre est montré en aperçu
     const teaser = Game.s.spores <= 0;
     $('talent-tree').classList.toggle('teased', teaser);
     $('tree-teaser').classList.toggle('hidden', !teaser);
-    $('btn-prestige').disabled = gain < 1;
 
     $('spores-avail').textContent = fmt(Game.sporesAvailable());
     let buyable = 0;
@@ -848,25 +850,27 @@ const UI = {
     }
     $('talent-badge').classList.toggle('hidden', buyable === 0);
 
+    const canMut = Game.canMutate();
+    $('mutation-state').textContent = s.spores < 1 ? '' : canMut ? t('pre.mutReady') : t('pre.mutWait');
     for (const sp of SPECIES) {
       const { d, style } = this.speciesNodes[sp.id];
-      const open = Game.speciesUnlocked(sp);
-      d.className = 'species' + (open ? '' : ' locked') + (s.nextSpecies === sp.id ? ' chosen' : '') + (s.species === sp.id ? ' current' : '');
-      style.textContent = open
-        ? `${sp.style}${s.species === sp.id ? t('pre.current') : ''}${s.nextSpecies === sp.id ? t('pre.chosen') : ''}`
-        : t('pre.locked', { text: sp.unlock.text });
+      const open = Game.speciesUnlocked(sp), cur = s.species === sp.id;
+      d.className = 'species' + (open ? '' : ' locked') + (cur ? ' current chosen' : '') + (open && !cur && !canMut ? ' waiting' : '');
+      d.setAttribute('aria-disabled', String(!open || cur || !canMut));
+      style.textContent = open ? `${sp.style}${cur ? t('pre.current') : ''}` : t('pre.locked', { text: sp.unlock.text });
     }
 
     const chalOn = Game.challengesUnlocked();
+    const running = Game.trial();
     $('chal-list').classList.toggle('teased', !chalOn);
     $('chal-teaser').classList.toggle('hidden', chalOn);
-    $('chal-done-count').textContent = Object.keys(s.challengesDone).length;
+    $('chal-done-count').textContent = Object.keys(s.challengesDone).filter(id => CHALLENGES.some(c => c.id === id)).length;
     for (const c of CHALLENGES) {
       const { d, btn } = this.chalNodes[c.id];
-      const done = Game.chalDone(c.id), active = Game.inChal(c.id);
+      const done = Game.chalDone(c.id), active = running === c;
       d.className = 'chal' + (done ? ' done' : '') + (active ? ' active' : '');
-      btn.textContent = active ? t('chal.running') : done ? t('chal.redo') : t('chal.launch');
-      btn.disabled = active || !!s.challenge || !chalOn;
+      btn.textContent = active ? t('chal.running') : done ? t('chal.doneBtn') : t('chal.launch');
+      btn.disabled = active || done || !!running || !chalOn;
     }
     $('talent-badge').textContent = buyable;
   },
@@ -902,14 +906,15 @@ const UI = {
     const pc = isEn() ? '%' : ' %';
     const rows = [
       ['st.playTime', fmtTime(st.playTime)],
-      ['st.cycle', fmt(st.totalEarned)],
       ['st.allTime', fmt(st.allTimeEarned)],
       ['st.clicks', fmt(st.clicks)],
       ['st.clickValue', fmt(Game.clickValue(), 1)],
       ['st.clickEarned', fmt(st.clickEarned)],
       ['st.drops', fmt(st.dropsClicked)],
       ['st.seasons', fmt(st.seasonsSeen)],
-      ['st.prestiges', fmt(st.prestiges)],
+      ['st.spores', fmt(Game.s.spores)],
+      ['st.fruitings', fmt(st.fruitings)],
+      ...(st.prestiges > 0 ? [['st.prestiges', fmt(st.prestiges)]] : []),
       ['st.talents', `${Object.keys(Game.s.talents).length} / ${TALENTS.length}`],
       ['st.sugar', fmt(st.sugarEarned)],
       ['st.boars', fmt(st.boars)],
@@ -923,12 +928,125 @@ const UI = {
       ['st.glows', fmt(st.glows)],
       ['st.amber', `${fmt(Game.s.amber)} (×${fmt(Game.amberMult(), 2)})`],
       ['st.relics', `${Object.keys(Game.s.relics).length} / ${RELICS.length}`],
-      ['st.ach', `${Game.achCount()} / ${ACHIEVEMENTS.length} (+${Game.achCount() * 2}${pc})`],
+      ['st.ach', `${Game.achCount()} / ${Game.achTotal()} (+${Game.achCount() * 2}${pc})`],
       ['st.perm', '×' + fmt(Game.permanentMult(), 2)],
       ['st.branches', fmt(Network.nodes.length)],
     ];
     $('stats').innerHTML = rows.map(r => `<tr><td>${t(r[0])}</td><td>${r[1]}</td></tr>`).join('');
     this.updateNotesList();
+    this.updateLegacy();
+  },
+
+  // ---------- Héritage des anciennes forêts (V11) ----------
+  updateLegacy() {
+    const lg = Game.s.legacy;
+    $('legacy-sec').classList.toggle('hidden', !lg);
+    if (!lg) return;
+    $('legacy-text').innerHTML = t(lg.n > 1 ? 'leg.text' : 'leg.text1', { n: fmt(lg.n), p: fmt((Game.legacyMult() - 1) * 100) });
+  },
+  legacyHTML() {
+    const lg = Game.s.legacy;
+    const p = fmt((Game.legacyMult() - 1) * 100);
+    return `<div class="legacy-note"><div class="note-kicker">${t('leg.kicker')}</div>
+      <h2>${t('leg.noteTitle')}</h2>
+      ${t('leg.note', { s: lg.n > 2 ? t('leg.many', { n: fmt(lg.n) }) : t(lg.n === 2 ? 'leg.twice' : 'leg.once') }).split('\n').map(x => `<p>${x}</p>`).join('')}
+      <ul class="legacy-gifts"><li>${t('leg.gift1', { p })}</li><li>${t('leg.gift2')}</li><li>${t('leg.gift3')}</li><li>${t('leg.gift4')}</li></ul>
+      <p class="legacy-sign">${t('leg.sign')}</p></div>`;
+  },
+  showLegacy() {
+    if (!Game.s.legacy) return;
+    this.modal(this.legacyHTML());
+    document.querySelector('.modal-box').classList.add('legacy-open');
+  },
+
+  // ---------- Planche d'épreuve (V11) ----------
+  // Petit réseau à part : sa planche dessinée, ses générateurs, sa barre d'objectif. Rien n'y touche le réseau principal.
+  initPlate() {
+    this.plateView = PlateView.make($('plate-canvas'));
+    this.plateRows = {};
+    $('plate-canvas').addEventListener('pointerdown', e => {
+      const def = Game.trial();
+      if (!def) return;
+      const v = Game.clickPlate(def.id);
+      this.plateView.clickBurst();
+      const r = $('plate-canvas').getBoundingClientRect();
+      const f = el('div', 'floater', def.rule.noClick ? '0' : '+' + fmt(v));
+      f.style.left = (e.clientX - r.left - 20) + 'px';
+      f.style.top = (e.clientY - r.top - 20) + 'px';
+      $('plate-floaters').appendChild(f);
+      setTimeout(() => f.remove(), 1000);
+      this.update();
+    });
+  },
+  // Rejoue le dessin de la planche en cours (au lancement, au chargement, à l'import)
+  openPlate() {
+    const def = Game.trial();
+    this.plateKey = null;
+    $('plate-panel').classList.toggle('hidden', !def);
+    if (!def) { this.plateView.plateId = null; return; }
+    requestAnimationFrame(() => {
+      this.plateView.resize();
+      this.plateView.rebuild(Game.plate(def.id));
+      this.plateView.plateId = def.id;
+    });
+  },
+  platePanelVisible() { return !!Game.trial() && $('tab-prestige').classList.contains('active'); },
+  updatePlate() {
+    const def = Game.trial();
+    $('plate-panel').classList.toggle('hidden', !def);
+    if (!def) return;
+    if (this.plateView.plateId !== def.id) this.openPlate();
+    if (!$('tab-prestige').classList.contains('active')) return;
+    const p = Game.plate(def.id);
+    const list = Game.plateGens(def);
+    const key = def.id + '|' + Settings.v.lang + Settings.v.numbers;
+    if (key !== this.plateKey) {
+      this.plateKey = key;
+      $('plate-icon').textContent = def.icon;
+      $('plate-name').textContent = def.name;
+      $('plate-rule').textContent = '⚖️ ' + def.ruleText;
+      $('plate-caption').innerHTML = t('plate.trialCaption', { name: def.name });
+      this.plateRows = {};
+      $('plate-gens').replaceChildren(...list.map(g => {
+        const row = el('button', 'pgen', `<span class="icon">${g.icon}</span><span class="pname"></span><span class="powned"></span><span class="pcost"></span>`);
+        row.type = 'button';
+        row.addEventListener('click', () => { if (Game.buyPlateGen(def.id, g.id, this.buyMode)) this.update(); });
+        this.plateRows[g.id] = { row, name: row.querySelector('.pname'), owned: row.querySelector('.powned'), cost: row.querySelector('.pcost'), icon: row.querySelector('.icon') };
+        return row;
+      }));
+    }
+    const nps = Game.plateNps(def);
+    $('plate-nutrients').innerHTML = t('plate.nutrients', { n: fmt(p.nutrients) });
+    $('plate-nps').textContent = t('plate.nps', { v: fmt(nps, nps < 100 ? 1 : 0) });
+    const pct = Math.min(1, p.earned / def.goal);
+    $('plate-bar').style.width = (pct * 100) + '%';
+    $('plate-goal').textContent = t('plate.goal', { a: fmt(p.earned), b: fmt(def.goal), p: fmt(pct * 100, 1) });
+    let mystery = false;
+    list.forEach((g, i) => {
+      const r = this.plateRows[g.id];
+      const vis = Game.plateGenVisible(def, i);
+      r.row.classList.toggle('hidden', !vis && mystery);
+      if (!vis) {
+        mystery = true;
+        r.row.classList.add('locked');
+        r.row.disabled = true;
+        r.icon.textContent = '❔';
+        r.name.textContent = '???';
+        r.owned.textContent = '';
+        r.cost.textContent = t('plate.mystery', { n: fmt(g.baseCost * 0.4) });
+        return;
+      }
+      r.row.classList.remove('locked');
+      r.icon.textContent = g.icon;
+      r.name.textContent = g.name;
+      const n = this.buyMode === 'max' ? Math.max(1, Game.plateMaxAffordable(def, g.id)) : this.buyMode;
+      const cost = Game.plateCost(def, g.id, n);
+      const can = cost <= p.nutrients;
+      r.row.disabled = !can;
+      r.row.classList.toggle('affordable', can);
+      r.owned.textContent = p.gens[g.id] || 0;
+      r.cost.textContent = `${n > 1 ? '×' + n + ' · ' : ''}${fmt(cost)}`;
+    });
   },
 };
 

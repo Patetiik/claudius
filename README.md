@@ -16,7 +16,7 @@ ou servir le dossier : `python3 -m http.server 8765 --bind 127.0.0.1`.
 - **Gouttes de pluie 💧** aléatoires : ondée (×3), flaque (gain instantané) ou orage (clic ×15).
 - **Évolutions** : ×2/×3 par générateur, clic en % de la prod, bonus globaux.
 - **Jalons** (43) : +2 % de production chacun.
-- **Sporulation** (prestige, dès 1 M) : spores = (total du cycle / 1 M)^¼, +5 % chacune (racine carrée avant la v6).
+- **Sporulation continue** (v11, plus aucune remise à zéro) : spores = 1,25 × (total produit depuis toujours / 1 M)^¼, libérées toutes seules (même hors ligne), +5 % chacune. Avant la v11 : prestige avec remise à zéro, (total du cycle / 1 M)^¼.
 - Sauvegarde auto (localStorage, 10 s) + gains hors-ligne (50 %, 8 h max).
 
 ## Nouveautés v2
@@ -210,6 +210,46 @@ Une version d’accueil pour les nouveaux venus, sans nouvelle mécanique de jeu
   Corrigé), s’ouvre depuis le bandeau ou le Carnet. Contenu dans `js/changelog.js`, anglais dans `js/i18n.js`.
 - Sauvegarde v8 (codes `CLAUDIUS8:…`) : champs `notes` et `guideDone`. Les parties et codes v1 à v9 se chargent tels quels.
 
+## Nouveautés v11 — sporulation continue
+Plus aucune remise à zéro : refonte du cœur du jeu, testée au simulateur et sur d’anciennes sauvegardes.
+- **Spores continues** : `spores = sporeLegacy + ⌊m × (courbe(total depuis toujours) − sporeOrigin)⌋`, jamais moins qu’un nouveau
+  joueur au même total (`⌊m × courbe⌋`). Courbe `1,25 × (total / 1 M)^0,25` (`SPORE_K`, `SPORE_EXP` dans `data.js`), plafond de sécurité :
+  au-delà de 200 000 spores la courbe passe en racine carrée, jamais plus de 10⁸. `m` = ×1,5 avec la Résine. Les spores se mettent à jour
+  à chaque tick et pendant l’absence (`syncSpores`). Barre « Prochaine spore » sur le total depuis toujours (`Game.sporeProgress()`).
+  Le bouton « Sporuler » et la remise à zéro (`prestige()`) sont retirés.
+- **Grande fructification** : à chaque palier de spores (chaque spore jusqu’à 10, puis tous les +10 %, `nextFruitAfter`), un grand
+  carpophore ivoire sort de terre à la surface et lâche un nuage de spores qui retombe sur la planche (≈ 10 s, au plus une toutes les 40 s ;
+  figé et plus court en animations réduites). Purement visuel. Note de terrain « Grande fructification » la première fois.
+- **Mutation d’espèce** : à tout moment, effet immédiat, au plus une par saison (`Game.mutate`, `s.mutSeason` = `stats.seasonsSeen`).
+  Remplace le choix « pour le prochain cycle » (`nextSpecies` ignoré).
+- **Planches d’épreuve** (les 5 défis) : un petit réseau à part (`s.plates[id]` : nutriments, générateurs, graine et journal de dessin),
+  dessiné sur son propre canvas (`PlateView.make`) dans l’onglet Sporulation, à côté du réseau principal qu’il ne touche jamais.
+  Il hérite des évolutions et des bonus permanents du réseau principal, moins ce que sa règle retire (`rule` : `noClick`, `season`,
+  `prod`, `noSpores` ; `gens` : générateurs permis). Il pousse aussi hors ligne et avec la Croissance autonome ; ce qu’il produit ne compte
+  pas pour les spores. Une seule à la fois, abandon sans pénalité, récompenses inchangées (`challengesDone`). Débloquées à 5 spores.
+  **Pour la v12 (biomes)** : ajouter des définitions de planches à côté de `CHALLENGES` (même forme : `gens`, `rule`, `goal`), les chercher
+  dans `Game.plateDef`, et les nettoyer dans `cleanPlates` ; tout le reste (production, achats, dessin, hors ligne) est déjà générique.
+- **Bonus de début de cycle remplacés** (ceux qui les possèdent les gardent) : Germination rapide → hyphes et rhizomorphes ×3 ;
+  Banque de graines → générateurs 25 % moins chers ; Sève fossile → sucre ×2 (inchangé) et sucre à 100 % hors ligne.
+- **Sucre et évolutions sucrées permanents**, prix revus (15 → 150 000 au lieu de 10 → 40 000) ; Fermentation : +1 % par 50 de sucre
+  (au lieu de 10), toujours au plus +50 %.
+- **Retouches** : « sur ce cycle » → « au total » (générateurs mystère, évolutions globales) ; jalon « Dans le vent » = « Première spore » ;
+  Armillaire et Pleurote à la 1ʳᵉ spore, Truffe noire à 25 spores (ou 3 anciennes sporulations), poussée de carpophores dès la 1ʳᵉ spore ;
+  textes FR/EN, notes de terrain (« Bientôt des spores », « Spores et talents », + « Grande fructification », « Mutation »,
+  « Planches d’épreuve ») et infobulles réécrits. Le Carnet compte les spores et les fructifications (et les sporulations d’avant la v11).
+- **Migration sans perte** (sauvegarde v9, codes `CLAUDIUS9:` ; v1 à v8 acceptés) : spores gardées (`sporeLegacy`), la courbe repart du
+  point où en est le joueur (`sporeOrigin`) pour que la progression reprenne tout de suite ; réseau, sucre et évolutions sucrées conservés ;
+  un défi en cours est annulé sans pénalité (fenêtre d’explication).
+- **Héritage des anciennes forêts** (parties avec `stats.prestiges ≥ 1`, posé uniquement à la migration d’une sauvegarde d’avant la v11) :
+  +2 % de production par sporulation passée (au plus +100 %), jalon exclusif « Ancien des forêts » (caché pour les autres, hors du total),
+  titre « Pionnier de la sporulation » dans le Carnet, spore dorée qui tourne autour du cœur du réseau, et une note de carnet de
+  remerciement à la première ouverture (relisible depuis le Carnet). Les fenêtres de démarrage s’enchaînent sans se chevaucher.
+- **Équilibrage** (simulateur `.claude/outils/sim.js`, modèle A = v10.1 dans `snap-v10/`, modèle B = v11 dans `snap/`, profils `lazy` et
+  `active`, 3 graines) : bot peu actif (2 clics/s pendant 5 min puis rien) — v10.1 : Mycélium continental 2 h 03, 1ᵉʳ ambre 2 h 47,
+  Lichen 4 h 34, Noosphère 5 h 15 ; v11 : 1 h 10, 3 h 41, 4 h 42, 4 h 57. Bot actif (2 clics/s en continu, attrape tout) — v10.1 :
+  continental 0 h 50, Noosphère 1 h 09 ; v11 : 0 h 21, 0 h 34 (sans remise à zéro, il ne reconstruit plus son réseau). En puissance 0,30,
+  la boucle s’emballait déjà ; le plafond arrête la course vers 10⁶ spores (5 × 10⁶ en v10.1 à 30 h).
+
 ## Publier une mise à jour
 1. Modifier le jeu, le tester en local sur `http://127.0.0.1:8765/?sandbox=test`.
 2. Changer le numéro de version (sinon les joueurs peuvent garder l’ancienne version en cache) :
@@ -221,10 +261,10 @@ Une version d’accueil pour les nouveaux venus, sans nouvelle mécanique de jeu
 5. Vérifier sur https://patetiik.github.io/claudius/?sandbox=test (jamais sur ta vraie partie).
 
 ## Structure
-- `js/data.js` — tout le contenu chiffré (générateurs, saisons, évolutions, jalons, talents, sucre, événements, ambre et reliques, herbier, notes de terrain et objectifs guidés) : c'est ici qu'on ajoute.
+- `js/data.js` — tout le contenu chiffré (générateurs, saisons, évolutions, jalons, courbe des spores, talents, sucre, événements, planches d’épreuve, ambre et reliques, herbier, notes de terrain et objectifs guidés) : c'est ici qu'on ajoute.
 - `js/i18n.js` — tous les textes, en français et en anglais (v10) : chaque ajout de contenu y met ses textes dans les deux langues.
 - `js/game.js` — logique pure et sauvegarde.
-- `js/network.js` — rendu canvas du réseau.
+- `js/network.js` — rendu canvas du réseau, grande fructification, spore dorée, vues de planches (`PlateView`).
 - `js/ui.js`, `js/main.js` — interface et boucles ; `js/help.js` — aide contextuelle (« ? » et infobulles, v10).
 - `js/util.js` — bac à sable, réglages du joueur, format des nombres.
 - `index.html` — page unique ; à chaque version, lancer `./nouvelle-version.sh` (voir ci-dessus).
@@ -240,6 +280,6 @@ Une version d’accueil pour les nouveaux venus, sans nouvelle mécanique de jeu
 - ~~v8 : jeu jouable par d’autres personnes, sur n’importe quel appareil (pas seulement iPhone) : hébergement public, navigateurs et écrans variés (ordinateur, Android, tablette), sauvegarde propre à chaque joueur.~~ ✅
 - ~~v9 : herbier (collection cumulative de 12 espèces, prospection automatique même hors ligne, lueurs dans la litière, relique Loupe de naturaliste).~~ ✅
 - ~~v10 « Premières pages » : accueil des nouveaux joueurs — notes de carnet à la 1ʳᵉ rencontre de chaque mécanique (relisibles dans le Carnet), objectifs guidés des 5 premières minutes, « ? » et infobulles détaillant chaque valeur, réglages (animations réduites, taille du texte, contraste, format des nombres, langue FR/EN), équilibrage des 30 premières minutes, fenêtre « Bon retour » détaillée.~~ ✅
-- v11 (prévu) « Sporulation continue » : plus aucune remise à zéro — les spores se libèrent en continu d’après le total produit depuis toujours (courbe ≈ racine 4ᵉ, plafond de sécurité ; étude au simulateur : rythme comparable à l’actuel), grande fructification visuelle à chaque palier ; mutation d’espèce à tout moment (1 par saison) ; défis transformés en planches d’épreuve parallèles ; remplacement des bonus de début de cycle (Germination rapide, Banque de graines, Sève fossile) ; sucre et évolutions sucrées permanents (prix revus) ; migration sans perte des parties existantes ; **compensation des joueurs qui ont déjà sporulé** (« Héritage des anciennes forêts » : +2 % de production permanente par sporulation passée, plafonné à +100 %, jalon exclusif « Ancien des forêts », titre « Pionnier de la sporulation » dans le Carnet, spore dorée au cœur du réseau) avec une note de carnet chaleureuse à la première ouverture qui les remercie comme pionniers.
+- ~~v11 « Sporulation continue » : plus aucune remise à zéro — les spores se libèrent en continu d’après le total produit depuis toujours (courbe ≈ racine 4ᵉ, plafond de sécurité ; étude au simulateur : rythme comparable à l’actuel), grande fructification visuelle à chaque palier ; mutation d’espèce à tout moment (1 par saison) ; défis transformés en planches d’épreuve parallèles ; remplacement des bonus de début de cycle (Germination rapide, Banque de graines, Sève fossile) ; sucre et évolutions sucrées permanents (prix revus) ; migration sans perte des parties existantes ; **compensation des joueurs qui ont déjà sporulé** (« Héritage des anciennes forêts » : +2 % de production permanente par sporulation passée, plafonné à +100 %, jalon exclusif « Ancien des forêts », titre « Pionnier de la sporulation » dans le Carnet, spore dorée au cœur du réseau) avec une note de carnet chaleureuse à la première ouverture qui les remercie comme pionniers.~~ ✅
 - v12 (prévu) « Nouvelles planches » : 3 biomes colonisés en parallèle de la forêt principale, sur la base des planches d’épreuve de la v11 (Tourbière → tourbe, Forêt alpine → givre, Bois mort tropical → spores rares), 4 générateurs et une surface propres chacun, production continue et hors ligne, liens racinaires (bonus croisés), sélecteur de planches avec aperçus grisés, +3 espèces d’herbier.
 - v13 (prévu) « Ambiance et partage » : paysage sonore Web Audio par saison et météo (désactivé par défaut, coupé en arrière-plan), fiche « Partager ma planche » en image (partage natif ou PNG, sans serveur), cycle jour/nuit selon l’heure réelle, petite faune décorative.

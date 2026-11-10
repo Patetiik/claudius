@@ -3,8 +3,8 @@
 const SAVE_KEY = 'claudius-save-v1' + (SANDBOX ? ':sandbox:' + SANDBOX : '');
 const BACKUP_KEY = SAVE_KEY + ':backup';    // la partie la plus avancée jamais vue
 const CORRUPT_KEY = SAVE_KEY + ':corrupt';  // copie brute d'une sauvegarde illisible
-const SAVE_VERSION = 8;
-const EXPORT_PREFIX = 'CLAUDIUS8:';
+const SAVE_VERSION = 9;   // v11 : sporulation continue (migration des sauvegardes 1 à 8 dans applyData)
+const EXPORT_PREFIX = 'CLAUDIUS9:';
 const NET_LOG_MAX = 900;   // = MAX_BRANCHES du rendu
 const EXPORT_PREFIX_RE = /^CLAUDIUS\d+:/;  // accepte aussi les codes v2
 
@@ -12,19 +12,25 @@ function freshState(keep) {
   const s = {
     version: SAVE_VERSION,
     nutrients: 0,
-    spores: 0,         // spores gagnées au total (donnent le bonus)
+    spores: 0,         // spores gagnées au total (donnent le bonus ; ne baisse jamais)
     sporesSpent: 0,    // spores dépensées dans l'arbre de talents
+    // V11 : spores = sporeLegacy + ⌊m × (sporeCurve(total depuis toujours) − sporeOrigin)⌋
+    // Une partie d'avant la v11 garde ses spores (sporeLegacy) et repart du point de la courbe où elle en était.
+    sporeLegacy: 0,
+    sporeOrigin: 0,
+    nextFruit: 1,      // V11 : palier de spores de la prochaine grande fructification
     talents: {},
-    sugar: 0,          // 🍯 sucre (remis à zéro à chaque sporulation)
-    sugarUpg: {},      // évolutions sucrées du cycle
-    species: 'commun',     // espèce du cycle en cours
-    nextSpecies: 'commun', // espèce choisie pour le prochain cycle
-    challenge: null,       // défi en cours (id) ou null
+    sugar: 0,          // 🍯 sucre (permanent depuis la v11)
+    sugarUpg: {},      // évolutions sucrées (permanentes depuis la v11)
+    species: 'commun', // espèce actuelle (V11 : mutation à tout moment, une fois par saison)
+    mutSeason: -1,     // V11 : saison (stats.seasonsSeen) de la dernière mutation
     challengesDone: {},
+    plates: {},        // V11 : planches à part (épreuves ; biomes en v12), par identifiant
+    legacy: null,      // V11 : Héritage des anciennes forêts { n: sporulations d'avant la v11, thanked }
     amber: 0,          // ambre gagné au total (V6, 2ᵉ prestige)
     amberSpent: 0,     // ambre dépensé en reliques
     relics: {},
-    cycleSeasons: 0,   // saisons vécues sur ce cycle (talent Aurore)
+    cycleSeasons: 0,   // saisons vécues (talent Aurore ; « sur ce cycle » avant la v11)
     rival: null,       // colonie rivale en cours : { hp, max, left, seed }
     nextRival: 200,
     herbarium: {},     // V9 : niveau de chaque espèce trouvée (jamais remis à zéro)
@@ -44,7 +50,7 @@ function freshState(keep) {
       seasonsSeen: 1, prestiges: 0, playTime: 0, clickEarned: 0,
       sugarEarned: 0, boars: 0, droughts: 0,
       rivals: 0, flushPicked: 0, fossils: 0,
-      specimens: 0, glows: 0,
+      specimens: 0, glows: 0, fruitings: 0,
     },
     seasonClock: 0,
     buffs: [],
@@ -67,6 +73,24 @@ function cleanHerbarium(h) {
   return o;
 }
 
+// Planches d'une sauvegarde (V11) : seulement les planches connues, des nombres et un journal valide
+const PLATE_LOG_MAX = 260;
+function cleanPlates(d) {
+  const o = {};
+  if (!d || typeof d !== 'object') return o;
+  for (const c of CHALLENGES) {
+    const p = d[c.id];
+    if (!p || typeof p !== 'object') continue;
+    const gens = {};
+    for (const g of (c.gens || PLATE_GENS)) { const n = Math.floor(Number(p.gens && p.gens[g]) || 0); if (n > 0) gens[g] = n; }
+    o[c.id] = { nutrients: Math.max(0, Number(p.nutrients) || 0), earned: Math.max(0, Number(p.earned) || 0), gens,
+      netSeed: Number.isInteger(p.netSeed) ? p.netSeed >>> 0 : 1,
+      netLog: typeof p.netLog === 'string' && /^[a-k]*$/.test(p.netLog) ? p.netLog.slice(0, PLATE_LOG_MAX) : '' };
+    break;  // une seule épreuve à la fois
+  }
+  return o;
+}
+
 const Game = {
   s: freshState(),
   listeners: {},
@@ -78,25 +102,25 @@ const Game = {
 
   // ---------- Saisons ----------
   seasonIndex() {
-    if (this.inChal('winter')) return 3;
     return Math.floor(this.s.seasonClock / SEASON_DURATION) % SEASONS.length;
   },
   season() { return SEASONS[this.seasonIndex()]; },
   seasonProgress() { return (this.s.seasonClock % SEASON_DURATION) / SEASON_DURATION; },
-  seasonMult(id) {
-    let m = this.season().mult[id] || 1;
+  // se : saison à utiliser (une planche peut avoir sa saison figée), par défaut la saison en cours
+  seasonMult(id, se) {
+    se = se || this.season();
+    let m = se.mult[id] || 1;
     if (m > 1 && this.s.upgrades.season0) m = 1 + (m - 1) * 2;
     if (m < 1 && this.has('bloom')) m = 1 - (1 - m) / 2;
-    if (m < 1 && this.season().id === 'hiver' && this.chalDone('winter')) m = 1;
+    if (m < 1 && se.id === 'hiver' && this.chalDone('winter')) m = 1;
     if (m < 1 && this.relic('calendar')) m = 1;
     return m;
   },
 
   // ---------- Talents ----------
-  has(id) { return !this.inChal('amnesia') && !!this.s.talents[id]; },
+  has(id) { return !!this.s.talents[id]; },
   sporesAvailable() { return this.s.spores - this.s.sporesSpent; },
   sporeBonusPer() {
-    if (this.inChal('amnesia')) return 0;
     return (this.has('fertile') ? 0.07 : SPORE_BONUS) + (this.chalDone('amnesia') ? 0.01 : 0);
   },
   talentState(t) {
@@ -115,43 +139,128 @@ const Game = {
   },
   offlineCap() { return (this.has('dormancy') ? 24 : 8) * 3600; },
   offlineRate() { return this.has('dormancy') ? 1 : 0.5; },
-  genBaseCost(g) { return g.baseCost * (this.has('heritage') ? 0.9 : 1); },
+  genBaseCost(g) { return g.baseCost * (this.has('heritage') ? 0.9 : 1) * (this.relic('seedbank') ? 0.75 : 1); },
 
-  // ---------- Espèces (V4) ----------
+  // ---------- Espèces (V4 ; mutation en V11) ----------
   sp() { return SPECIES.find(x => x.id === this.s.species) || SPECIES[0]; },
   speciesUnlocked(sp) { return !sp.unlock || !!sp.unlock.check(this.s); },
-  chooseSpecies(id) {
+  // Mutation : effet immédiat, au plus une fois par saison
+  canMutate() { return this.s.mutSeason !== this.s.stats.seasonsSeen; },
+  mutate(id) {
     const sp = SPECIES.find(x => x.id === id);
-    if (!sp || !this.speciesUnlocked(sp)) return false;
-    this.s.nextSpecies = id;
+    if (!sp || id === this.s.species || !this.speciesUnlocked(sp) || !this.canMutate()) return false;
+    this.s.species = id;
+    this.s.mutSeason = this.s.stats.seasonsSeen;
+    this.dirty();
+    this.emit('mutation', sp);
+    this.emit('log', t('log.mutation', { name: sp.name }));
     return true;
   },
 
-  // ---------- Défis (V4) ----------
-  inChal(id) { return this.s.challenge === id; },
+  // ---------- Planches d'épreuve (V11, d'après les défis de la V4) ----------
+  // Une planche est un petit réseau à part : ses nutriments, ses générateurs, son dessin. Elle ne touche jamais
+  // au réseau principal et ce qu'elle produit ne compte pas pour les spores. Modèle prévu pour les biomes (v12).
   chalDone(id) { return !!this.s.challengesDone[id]; },
-  chal() { return CHALLENGES.find(c => c.id === this.s.challenge) || null; },
-  challengesUnlocked() { return this.s.stats.prestiges >= 1; },
-  startChallenge(id) {
-    if (!this.challengesUnlocked() || !CHALLENGES.some(c => c.id === id)) return false;
-    return this.prestige(id);
+  challengesUnlocked() { return this.s.spores >= TRIAL_UNLOCK || this.s.stats.prestiges >= 1; },
+  plateDef(id) { return CHALLENGES.find(c => c.id === id) || null; },  // v12 : chercher aussi dans les biomes
+  plate(id) { return this.s.plates[id] || null; },
+  // Épreuve en cours (une seule à la fois)
+  trial() { return CHALLENGES.find(c => this.s.plates[c.id]) || null; },
+  plateGens(def) { return (def.gens || PLATE_GENS).map(id => GENERATORS.find(g => g.id === id)); },
+  plateSeason(def) { return def.rule.season ? SEASONS.find(se => se.id === def.rule.season) : this.season(); },
+  // Bonus permanents du réseau principal hérités par la planche, moins ce que sa règle retire
+  plateParts(def) {
+    const r = def.rule;
+    const parts = this.permanentParts().filter(p => !(r.noSpores && ['spores', 'talents', 'legacy'].includes(p.k)));
+    if (r.prod) parts.push({ k: 'plateRule', m: r.prod });
+    return parts;
   },
-  abandonChallenge() {
-    if (!this.s.challenge) return false;
-    this.emit('log', t('log.chalAbandon', { name: this.chal().name }));
-    this.s.challenge = null;
-    this.dirty();
+  plateMult(def) { return this.plateParts(def).reduce((m, p) => m * p.m, 1); },
+  plateUnitProd(def, gid) {
+    const g = GENERATORS.find(x => x.id === gid);
+    return g.baseProd * this.genUpgradeMult(gid, def.rule.noSpores) * this.seasonMult(gid, this.plateSeason(def)) * this.plateMult(def);
+  },
+  plateNps(def) {
+    const p = this.plate(def.id);
+    if (!p) return 0;
+    return this.plateGens(def).reduce((a, g) => a + (p.gens[g.id] ? this.plateUnitProd(def, g.id) * p.gens[g.id] : 0), 0);
+  },
+  plateCost(def, gid, n) {
+    const g = GENERATORS.find(x => x.id === gid), r = COST_GROWTH;
+    return this.genBaseCost(g) * Math.pow(r, this.plate(def.id).gens[gid] || 0) * (Math.pow(r, n) - 1) / (r - 1);
+  },
+  plateMaxAffordable(def, gid) {
+    const p = this.plate(def.id), g = GENERATORS.find(x => x.id === gid), r = COST_GROWTH;
+    const n = Math.floor(Math.log(p.nutrients * (r - 1) / (this.genBaseCost(g) * Math.pow(r, p.gens[gid] || 0)) + 1) / Math.log(r));
+    return Math.max(0, n);
+  },
+  plateGenVisible(def, i) {
+    const p = this.plate(def.id), list = this.plateGens(def), g = list[i];
+    if (i === 0 || p.gens[g.id] > 0 || p.gens[list[i - 1].id] > 0) return true;
+    return p.earned >= g.baseCost * 0.4;
+  },
+  buyPlateGen(id, gid, mode) {
+    const def = this.plateDef(id), p = this.plate(id);
+    if (!def || !p || !this.plateGens(def).some(g => g.id === gid)) return 0;
+    const n = mode === 'max' ? this.plateMaxAffordable(def, gid) : mode;
+    if (n <= 0) return 0;
+    const cost = this.plateCost(def, gid, n);
+    if (cost > p.nutrients) return 0;
+    p.nutrients -= cost;
+    p.gens[gid] = (p.gens[gid] || 0) + n;
+    const gi = GENERATORS.findIndex(g => g.id === gid);
+    for (let k = 0; k < Math.min(n, 30) && p.netLog.length < PLATE_LOG_MAX; k++) p.netLog += String.fromCharCode(97 + gi);
+    this.emit('plateGen', { id, gid, n });
+    return n;
+  },
+  plateClickValue(def) { return def.rule.noClick ? 0 : (1 + PLATE_CLICK_PCT * this.plateNps(def)) * this.herbKind('click'); },
+  clickPlate(id) {
+    const def = this.plateDef(id), p = this.plate(id);
+    if (!def || !p) return 0;
+    this.lastActive = Date.now();
+    const v = this.plateClickValue(def);
+    p.nutrients += v; p.earned += v;
+    this.checkPlate(def);
+    return v;
+  },
+  startTrial(id) {
+    const def = this.plateDef(id);
+    if (!def || !this.challengesUnlocked() || this.trial() || this.chalDone(id)) return false;
+    this.s.plates[id] = { nutrients: 0, earned: 0, gens: {}, netSeed: (Math.random() * 4294967296) >>> 0, netLog: '' };
+    this.emit('trialStart', def);
+    this.emit('log', t('log.trialStart', { name: def.name }));
     return true;
   },
-  checkChallenge() {
-    const c = this.chal();
-    if (!c || this.s.stats.totalEarned < c.goal) return;
-    this.s.challengesDone[c.id] = true;
-    this.s.challenge = null;
-    this.dirty();
-    this.emit('challengeDone', c);
+  abandonTrial() {
+    const def = this.trial();
+    if (!def) return false;
+    delete this.s.plates[def.id];
+    this.emit('trialEnd', { def, won: false });
+    this.emit('log', t('log.chalAbandon', { name: def.name }));
+    return true;
   },
-  genBlocked(id) { return this.inChal('solo') && !['hyphe', 'rhizo', 'litiere'].includes(id); },
+  checkPlate(def, quiet) {
+    const p = this.plate(def.id);
+    if (!p || p.earned < def.goal) return false;
+    this.s.challengesDone[def.id] = true;
+    delete this.s.plates[def.id];
+    this.dirty();
+    if (!quiet) this.emit('challengeDone', def);
+    this.emit('trialEnd', { def, won: true });
+    return true;
+  },
+  // rate : 1 en jeu, taux hors ligne pendant une absence. Renvoie les épreuves réussies.
+  tickPlates(dt, rate = 1, quiet) {
+    const done = [];
+    for (const id of Object.keys(this.s.plates)) {
+      const def = this.plateDef(id), p = this.s.plates[id];
+      if (!def) { delete this.s.plates[id]; continue; }
+      const g = this.plateNps(def) * dt * rate;
+      p.nutrients += g; p.earned += g;
+      if (this.checkPlate(def, quiet)) done.push(def);
+    }
+    return done;
+  },
 
   // ---------- Sucre (V3) ----------
   sug(id) { return !!this.s.sugarUpg[id]; },
@@ -179,7 +288,7 @@ const Game = {
   },
   fermentMult() {
     if (!this.sug('ferment')) return 1;
-    return 1 + Math.min(0.5, Math.floor(this.s.sugar / 10) * 0.01);
+    return 1 + Math.min(0.5, Math.floor(this.s.sugar / FERMENT_STEP) * 0.01);
   },
   sugarUpgState(u) {
     if (this.sug(u.id)) return 'owned';
@@ -208,8 +317,7 @@ const Game = {
     return msg;
   },
   droughtBuff() { return this.s.buffs.find(b => b.drought); },
-  // Le défi Désert est une sécheresse permanente (calculée, pas stockée)
-  droughtActive() { return this.inChal('desert') || !!this.droughtBuff(); },
+  droughtActive() { return !!this.droughtBuff(); },
   startDrought() {
     if (this.droughtActive() || this.chalDone('desert')) return;
     const mult = this.sug('starch') ? 0.75 : 0.5;
@@ -239,18 +347,22 @@ const Game = {
   },
 
   // ---------- Multiplicateurs ----------
-  genUpgradeMult(id) {
+  // noTalents : planche « Sans mémoire » (les talents n'y comptent pas)
+  genUpgradeMult(id, noTalents) {
     let m = 1;
     for (const u of UPGRADES) if (u.type === 'gen' && u.target === id && this.s.upgrades[u.id]) m *= u.mult;
     for (const u of SUGAR_UPGRADES) if (u.gens && u.gens[id] && this.s.sugarUpg[u.id]) m *= u.gens[id];
     const sp = this.sp();
     if (sp.gens && sp.gens[id]) m *= sp.gens[id];
     if (this.chalDone('solo') && ['hyphe', 'rhizo', 'litiere'].includes(id)) m *= 3;
-    if (this.has('colon') && LATE_GENS.includes(id)) m *= 3;
+    if (!noTalents && this.has('colon') && LATE_GENS.includes(id)) m *= 3;
+    if (!noTalents && this.has('germ') && (id === 'hyphe' || id === 'rhizo')) m *= 3;  // v11 : Germination rapide
     m *= this.herbGenMult(id);
     return m;
   },
   achCount() { return Object.keys(this.s.achievements).length; },
+  // Total affiché : un jalon exclusif (V11) ne compte que pour ceux qui l'ont
+  achTotal() { return ACHIEVEMENTS.filter(a => !a.exclusive || this.s.achievements[a.id]).length; },
   buffMult(kind) {
     const m = this.s.buffs.filter(b => b.kind === kind).reduce((m, b) => m * b.mult, 1);
     return kind === 'prod' && this.s.rival ? m * RIVAL_STEAL : m;
@@ -266,7 +378,6 @@ const Game = {
     if (this.has('aurora')) tal *= 1 + Math.min(0.6, 0.02 * this.s.cycleSeasons);
     let ch = 1;
     if (this.chalDone('noclick')) ch *= 1.1;
-    if (this.inChal('desert')) ch *= 0.5;
     const per = this.sporeBonusPer();
     return [
       { k: 'upgGlobal', m: up },
@@ -279,6 +390,7 @@ const Game = {
       { k: 'amber', v: { n: fmt(this.s.amber) }, m: this.amberMult() },
       { k: 'relics', m: this.relic('planet') ? 3 : 1 },
       { k: 'herb', v: { n: this.herbLevels() }, m: this.herbMult() },
+      { k: 'legacy', v: { n: this.legacyN() }, m: this.legacyMult() },
     ];
   },
   permanentMult() {
@@ -320,7 +432,6 @@ const Game = {
     return this._cache;
   },
   clickValue() {
-    if (this.inChal('noclick')) return 0;
     let flat = 1, pct = (this.has('acid') ? 0.05 : 0) + (this.sp().clickPct || 0);
     for (const u of UPGRADES) if (u.type === 'click' && this.s.upgrades[u.id]) { flat += u.flat; pct += u.pct; }
     if (this.has('jaws')) flat *= 5;
@@ -372,7 +483,6 @@ const Game = {
     return Math.max(0, n);
   },
   buyGen(id, mode) {
-    if (this.genBlocked(id)) return 0;
     const n = mode === 'max' ? this.maxAffordable(id) : mode;
     if (n <= 0) return 0;
     const cost = this.costOf(id, n);
@@ -386,7 +496,7 @@ const Game = {
   genVisible(i) {
     if (i === 0) return true;
     const g = GENERATORS[i], prev = GENERATORS[i - 1];
-    return this.s.gens[g.id] > 0 || this.s.gens[prev.id] > 0 || this.s.stats.totalEarned >= g.baseCost * 0.4;
+    return this.s.gens[g.id] > 0 || this.s.gens[prev.id] > 0 || this.s.stats.allTimeEarned >= g.baseCost * 0.4;
   },
   // Prochaines évolutions encore verrouillées, montrées en aperçu
   lockedUpgrades(max = 3) {
@@ -437,48 +547,64 @@ const Game = {
     this.dirty();
   },
 
-  // ---------- Prestige ----------
+  // ---------- Sporulation continue (V11) ----------
+  // Plus de remise à zéro : les spores se libèrent d'elles-mêmes d'après le total produit depuis toujours.
   sporeGainMult() { return this.relic('resin') ? 1.5 : 1; },
-  prestigeGain() { return sporesFor(this.s.stats.totalEarned, this.sporeGainMult()); },
-  // Sporulation ; avec challengeId, lance un défi (possible même sans spore à gagner)
-  prestige(challengeId) {
-    const gain = this.prestigeGain();
-    if (!challengeId && gain < 1) return false;
-    const old = this.s;
-    this.s = freshState({
-      spores: old.spores + gain,
-      sporesSpent: old.sporesSpent,
-      talents: old.talents,
-      achievements: old.achievements,
-      seasonClock: old.seasonClock,
-      species: old.nextSpecies,
-      nextSpecies: old.nextSpecies,
-      challengesDone: old.challengesDone,
-      challenge: challengeId || null,
-      amber: old.amber,
-      amberSpent: old.amberSpent,
-      relics: old.relics,
-      herbarium: old.herbarium,
-      prospect: old.prospect,
-      nextGlow: old.nextGlow,
-      notes: old.notes,
-      guideDone: old.guideDone,
-      sugar: this.relicIn(old, 'sapfossil') ? old.sugar * 0.25 : 0,
-    });
-    Object.assign(this.s.stats, old.stats, { totalEarned: 0, prestiges: old.stats.prestiges + (gain >= 1 ? 1 : 0) });
-    if (this.has('germ')) this.s.gens.hyphe = 10;
-    if (this.relic('seedbank')) {
-      this.s.gens.hyphe = Math.max(this.s.gens.hyphe, 25);
-      this.s.gens.rhizo = 25;
-      this.s.gens.litiere = 10;
-    }
-    this.syncNetLog();
-    const amberGain = this.syncAmber();
+  // Jamais moins qu'un nouveau joueur au même total : une ancienne partie qui n'avait pas encore sporulé
+  // reçoit tout de suite les spores de la courbe.
+  sporeTarget() {
+    const s = this.s, m = this.sporeGainMult(), c = sporeCurve(s.stats.allTimeEarned);
+    const kept = s.sporeLegacy + Math.max(0, Math.floor(m * (c - s.sporeOrigin) + 1e-9));
+    return Math.max(kept, Math.floor(m * c + 1e-9));
+  },
+  // Total depuis toujours où l'on aura n spores (pour la barre « Prochaine spore »)
+  sporeAt(n) {
+    const s = this.s, m = this.sporeGainMult();
+    const kept = n < s.sporeLegacy ? 0 : sporeCurveInv(s.sporeOrigin + (n - s.sporeLegacy) / m);
+    return Math.min(kept, sporeCurveInv(n / m));
+  },
+  sporeProgress() {
+    const n = this.s.spores, a = this.sporeAt(n), b = this.sporeAt(n + 1), x = this.s.stats.allTimeEarned;
+    return { have: x, next: b, pct: isFinite(b) && b > a ? Math.min(1, Math.max(0, (x - a) / (b - a))) : 1 };
+  },
+  // Met les spores à jour (elles ne baissent jamais). quiet : hors ligne, pas de fructification à l'écran.
+  syncSpores(quiet) {
+    const s = this.s, target = this.sporeTarget();
+    if (target <= s.spores) return 0;
+    const gain = target - s.spores;
+    s.spores = target;
     this.dirty();
-    this.checkAchievements();
-    this.emit('prestige', { gain, amberGain, challenge: this.chal() });
-    this.save();
-    return true;
+    if (s.spores >= s.nextFruit) {
+      s.nextFruit = nextFruitAfter(s.spores);
+      const now = Date.now();
+      if (!quiet && !(now - (this._lastFruit || 0) < FRUIT_MIN_GAP * 1000)) {
+        this._lastFruit = now;
+        s.stats.fruitings++;
+        this.emit('fruiting', { spores: s.spores });
+        this.emit('log', t('log.fruiting', { n: fmt(s.spores), p: fmt(s.spores * this.sporeBonusPer() * 100) }));
+      }
+    }
+    this.syncAmber(quiet);
+    return gain;
+  },
+
+  // ---------- Héritage des anciennes forêts (V11) ----------
+  // Pour les joueurs qui ont sporulé avant la v11 (posé une seule fois, à la migration de leur sauvegarde)
+  legacyN() { return this.s.legacy ? this.s.legacy.n : 0; },
+  legacyMult() { return 1 + Math.min(LEGACY_MAX, LEGACY_PER * this.legacyN()); },
+  // Migration d'une sauvegarde d'avant la v11 : rien n'est perdu.
+  // Les spores déjà gagnées restent (sporeLegacy) et les nouvelles s'ajoutent tout de suite à partir du point
+  // de la courbe où en est le joueur (sporeOrigin) ; le réseau en cours devient définitif ; un défi en cours est annulé.
+  migrateV11(data) {
+    const s = this.s, st = s.stats;
+    s.sporeLegacy = Math.max(0, Math.floor(Number(data.spores) || 0));
+    s.sporeOrigin = sporeCurve(st.allTimeEarned);
+    s.spores = Math.max(s.sporeLegacy, this.sporeTarget());
+    s.nextFruit = nextFruitAfter(s.spores);
+    s.cycleSeasons = Number(data.cycleSeasons) || 0;
+    const n = Math.floor(Number(st.prestiges) || 0);
+    if (n >= 1) s.legacy = { n, thanked: false };
+    this.migrated = { from: Number(data.version) || 1, chal: CHALLENGES.find(c => c.id === data.challenge) || null, prestiges: n };
   },
 
   // ---------- Ambre (V6) ----------
@@ -521,9 +647,16 @@ const Game = {
     }
     if (this.relic('autogrow')) {
       GENERATORS.forEach((g, i) => {
-        if (this.genBlocked(g.id) || !this.genVisible(i)) return;
+        if (!this.genVisible(i)) return;
         if (this.costOf(g.id, 1) <= this.s.nutrients * 0.05) this.buyGen(g.id, 1);
       });
+      // les planches poussent aussi toutes seules
+      for (const id of Object.keys(this.s.plates)) {
+        const def = this.plateDef(id), p = this.plate(id);
+        if (def) this.plateGens(def).forEach((g, i) => {
+          if (this.plateGenVisible(def, i) && this.plateCost(def, g.id, 1) <= p.nutrients * 0.05) this.buyPlateGen(id, g.id, 1);
+        });
+      }
     }
   },
 
@@ -686,7 +819,7 @@ const Game = {
       this.dirty();
       this.emit('season', this.season());
       if (this.eventsUnlocked() && Math.random() < (this.season().droughtChance || 0)) this.startDrought();
-      if (this.season().id === 'automne' && this.s.stats.prestiges >= 1 && Math.random() < FLUSH_CHANCE) {
+      if (this.season().id === 'automne' && this.s.spores >= 1 && Math.random() < FLUSH_CHANCE) {
         this.emit('flush', this.flushCount());
         this.emit('log', t('log.flush'));
       }
@@ -726,7 +859,8 @@ const Game = {
       this.endBuffs();
     }
     this.earn(this.nps() * dt);
-    if (this.s.challenge) this.checkChallenge();
+    this.syncSpores();
+    this.tickPlates(dt);
     const sugar = this.sugarRate() * dt;
     if (sugar > 0) {
       this.s.sugar += sugar;
@@ -826,8 +960,14 @@ const Game = {
       sugar: Number(data.sugar) || 0,
       challengesDone: pick({}, data.challengesDone),
       species: SPECIES.some(x => x.id === data.species) ? data.species : 'commun',
-      nextSpecies: SPECIES.some(x => x.id === data.nextSpecies) ? data.nextSpecies : 'commun',
-      challenge: CHALLENGES.some(c => c.id === data.challenge) ? data.challenge : null,
+      spores: Math.max(0, Math.floor(Number(data.spores) || 0)),
+      sporeLegacy: Math.max(0, Math.floor(Number(data.sporeLegacy) || 0)),
+      sporeOrigin: Math.max(0, Number(data.sporeOrigin) || 0),
+      nextFruit: Math.max(1, Math.floor(Number(data.nextFruit) || 1)),
+      mutSeason: Number.isInteger(data.mutSeason) ? data.mutSeason : -1,
+      plates: cleanPlates(data.plates),
+      legacy: data.legacy && typeof data.legacy === 'object' && Number(data.legacy.n) >= 1
+        ? { n: Math.floor(Number(data.legacy.n)), thanked: data.legacy.thanked === true } : null,
       amber: Number(data.amber) || 0,
       amberSpent: Number(data.amberSpent) || 0,
       relics: pick({}, data.relics),
@@ -852,12 +992,16 @@ const Game = {
       guideDone: data.guideDone === true,
     });
     for (const k of Object.keys(this.s.notes)) if (!NOTES.some(n => n.id === k)) delete this.s.notes[k];
+    this.migrated = null;
+    if (!(Number(data.version) >= 9)) this.migrateV11(data);
+    this.s.nextFruit = Math.max(this.s.nextFruit, Math.min(this.s.spores + 1, nextFruitAfter(this.s.spores)));
     this.syncNetLog();
+    this.syncSpores(true);
     this.syncAmber(true);
     // Sauvegarde d'avant la v10 : pas de notes d'un coup pour ce qu'on connaît déjà, pas d'objectifs de débutant
     if (!data.notes || typeof data.notes !== 'object') {
       this.markKnownNotes();
-      if (this.s.gens.myco > 0 || this.s.stats.prestiges > 0 || this.s.stats.allTimeEarned >= 2e4) this.s.guideDone = true;
+      if (this.s.gens.myco > 0 || this.s.spores > 0 || this.s.stats.allTimeEarned >= 2e4) this.s.guideDone = true;
     }
     this.dirty();
   },
@@ -907,7 +1051,10 @@ const Game = {
       .map(g => ({ g, n: this.s.gens[g.id], gain: this.genProd(g.id) / buffs * elapsed * rate }))
       .sort((a, b) => b.gain - a.gain);
     if (gain > 0) this.earn(gain);
-    const sugar = this.sugarRate() * elapsed * rate;
+    const sporesFrom = this.s.spores;
+    this.syncSpores(true);  // v11 : les spores continuent de se libérer hors ligne
+    const trials = this.tickPlates(elapsed, rate, true);
+    const sugar = this.sugarRate() * elapsed * (this.relic('sapfossil') ? 1 : rate);  // v11 : Sève fossile
     if (sugar > 0) { this.s.sugar += sugar; this.s.stats.sugarEarned += sugar; }
     // Herbier : la prospection continue pendant l'absence (espèces de la saison en cours)
     const found = [];
@@ -922,7 +1069,8 @@ const Game = {
     this.s.prospect = Math.min(1, p);
     this.s.buffs = this.s.buffs.filter(b => b.left - elapsed > 0).map(b => ({ ...b, left: b.left - elapsed }));
     if (this.s.rival && elapsed > 5) { this.s.rival = null; this.dirty(); }  // elle repart pendant ton absence
-    return { elapsed, away, rate, live, gain, perGen, sugar, found, prospectFrom, prospectTo: this.s.prospect };
+    return { elapsed, away, rate, live, gain, perGen, sugar, found, prospectFrom, prospectTo: this.s.prospect,
+      spores: this.s.spores - sporesFrom, trials };
   },
   exportSave() {
     this.s.lastSave = Date.now();

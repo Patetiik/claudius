@@ -11,6 +11,8 @@
     for (const x of top) rows.push(row(t('wb.of', { gen: `${x.g.name} ×${x.n}` }), '+' + fmt(x.gain), 'sub'));
     if (o.perGen.length > 4) rows.push(row('…', '+' + fmt(o.perGen.slice(4).reduce((a, x) => a + x.gain, 0)), 'sub'));
     if (o.sugar > 0) rows.push(row(t('wb.sugar'), '+' + fmt(o.sugar, o.sugar < 10 ? 1 : 0), 'main'));
+    if (o.spores > 0) rows.push(row(t('wb.spores'), '+' + fmt(o.spores), 'main'));  // v11 : les spores se libèrent aussi hors ligne
+    for (const d of o.trials || []) rows.push(row(t('wb.trial', { name: d.name }), t('wb.trialDone'), 'main'));
     if (o.found.length || o.prospectTo !== o.prospectFrom) {
       const a = Math.floor(o.prospectFrom * 100), b = Math.floor(o.prospectTo * 100);
       rows.push(row(t('wb.prospect'), o.found.length ? t(o.found.length > 1 ? 'wb.finds' : 'wb.find1', { n: o.found.length }) : t('wb.prospectVal', { a, b }), 'main'));
@@ -19,7 +21,7 @@
     const sp = new Map();
     for (const f of o.found) sp.set(f.x.id, { x: f.x, level: f.level, isNew: (sp.get(f.x.id) || f).isNew || f.isNew });
     const spec = [...sp.values()].map(v => `<li><strong>${v.x.name}</strong> <em>${v.x.latin}</em> · ${v.isNew ? t('wb.newSp') : t('wb.lvl', { l: v.level })}</li>`).join('');
-    UI.modal(`<h2>${t('wb.title')}</h2>
+    UI.queueModal(`<h2>${t('wb.title')}</h2>
       <p>${t('wb.away', { t: fmtTime(o.away) })}${o.away > o.elapsed + 1 ? t('wb.capped', { t: fmtTime(o.elapsed) }) : ''}</p>
       <p class="small">${t('wb.rate', { r })}</p>
       <table class="wb-table">${rows.join('')}</table>
@@ -34,6 +36,7 @@
   const offline = Game.load();
   if (offline && offline.found) UI.herbNew = offline.found.length;
   Network.rebuild(Game.s);
+  UI.openPlate();
   if (Game.s.rival) Network.startRival(Game.s.rival);
   if (Game.s.stats.clicks > 0) $('hint').style.opacity = 0;
 
@@ -53,8 +56,23 @@
       <p><button type="button" class="ghost lang-switch" id="btn-lang" lang="${other}">${t('m.otherLang')}</button></p>`);
     $('btn-lang').addEventListener('click', () => { UI.changeSetting('lang', other); welcome(); });
   }
+  // v11 : partie d'avant la sporulation continue. Les pionniers (qui ont sporulé) reçoivent d'abord leur note de carnet.
+  function afterMigration() {
+    const m = Game.migrated;
+    if (!m) return;
+    if (Game.s.legacy && !Game.s.legacy.thanked) {
+      Game.s.legacy.thanked = true;
+      UI.showLegacy();
+      Game.save();
+    } else if (m.from < 9 && Game.s.stats.allTimeEarned > 0) {
+      UI.queueModal(`<h2>${t('m.v11Title')}</h2><p>${t('m.v11')}</p>`);
+    }
+    if (m.chal) UI.queueModal(`<h2>${t('m.v11ChalTitle')}</h2><p>${t('m.v11Chal', { name: m.chal.name })}</p>`);
+    Game.migrated = null;
+  }
+  afterMigration();
   if (offline && offline.fromBackup) {
-    UI.modal(`<h2>${t('m.recoveredTitle')}</h2>
+    UI.queueModal(`<h2>${t('m.recoveredTitle')}</h2>
       <p>${Game.loadIssue === 'corrupt' ? t('m.recoveredCorrupt') : t('m.recoveredMissing')}
       ${t('m.recovered')}</p>
       <p class="muted small">${t('m.recoveredScore', { n: fmt(Game.progressScore(Game.s)) })}</p>`);
@@ -102,7 +120,7 @@
     const v = Game.click();
     Network.clickBurst();
     const r = canvas.getBoundingClientRect();
-    UI.floater(e.clientX - r.left, e.clientY - r.top, Game.inChal('noclick') ? '🤐' : '+' + fmt(v));
+    UI.floater(e.clientX - r.left, e.clientY - r.top, '+' + fmt(v));
     $('hint').style.opacity = 0;
   });
 
@@ -121,22 +139,17 @@
   Game.on('drop', () => { noteOn('drop'); UI.spawnDrop(); });  // la note d'abord : la goutte se pose au-dessus
   Game.on('boar', () => { UI.spawnBoar(); noteOn('boar'); });
   Game.on('drought', () => noteOn('drought'));
-  Game.on('prestige', ({ gain, amberGain, challenge }) => {
-    Network.rebuild(Game.s);
-    UI.upgKey = null;
-    const sp = Game.sp();
-    UI.modal(challenge
-      ? `<h2>${t('m.chalTitle', { name: challenge.name })}</h2>
-        ${gain >= 1 ? `<p>${t('m.chalSpores', { n: gain })}</p>` : ''}
-        <p>⚖️ ${challenge.rule}</p>
-        <p>${t('m.chalGoal', { n: fmt(challenge.goal) })}</p>
-        <p class="muted small">🏆 ${challenge.reward}</p>`
-      : `<h2>${t('m.sporeTitle')}</h2><p>${t('m.sporeGain', { n: gain })}</p>
-        <p>${t('m.reborn', { icon: sp.icon, name: sp.name })}</p>
-        <p>${t('m.permProd', { p: fmt(Game.s.spores * Game.sporeBonusPer() * 100) })}</p>
-        ${amberGain ? `<p>${t('m.amberGain', { n: amberGain, m: fmt(Game.amberMult(), 2) })}</p>` : ''}
-        <p class="muted small">${t('m.spendSpores')}</p>`);
-    UI.update();
+  // Grande fructification (v11) : à chaque palier de spores, rien n'est effacé
+  Game.on('fruiting', () => { Network.fruit(); noteOn('fruiting'); });
+  Game.on('mutation', () => { UI.update(); });
+  // Planches d'épreuve (v11)
+  Game.on('trialStart', () => UI.openPlate());
+  Game.on('trialEnd', () => UI.openPlate());
+  Game.on('plateGen', ({ id, gid, n }) => {
+    const v = UI.plateView;
+    if (v.plateId !== id) return;
+    const g = GENERATORS.find(x => x.id === gid);
+    for (let i = 0; i < Math.min(n, 30); i++) if (!v.addBranch(g)) break;
   });
   Game.on('rival', () => { Network.startRival(Game.s.rival); noteOn('rival'); });
   Game.on('rivalEnd', ({ won }) => { Network.endRival(won); UI.update(); });
@@ -147,7 +160,7 @@
   });
   Game.on('challengeDone', c => {
     UI.log(t('log.chalDone', { name: c.name }));
-    UI.modal(`<h2>${t('m.chalDoneTitle')}</h2><p><strong>${c.name}</strong></p>
+    UI.queueModal(`<h2>${t('m.chalDoneTitle')}</h2><p><strong>${c.name}</strong></p>
       <p>${c.reward}</p><p class="muted small">${t('m.chalContinue')}</p>`);
     UI.update();
   });
@@ -188,6 +201,14 @@
     lastFrame = now;
     Network.update(dt, Game.nps());
     Network.draw(Game.s, Game.season(), { drought: Game.droughtActive(), sugarRate: Game.sugarRate() });
+    // Planche d'épreuve (v11) : dessinée seulement quand elle est à l'écran
+    const def = UI.platePanelVisible() && Game.trial();
+    const pv = UI.plateView;
+    if (def && pv.plateId === def.id) {
+      const p = Game.plate(def.id);
+      pv.update(dt, Game.plateNps(def));
+      pv.draw(PlateView.fakeState(p), Game.plateSeason(def), { drought: (def.rule.prod || 1) < 1, sugarRate: 0 });
+    }
   }
   requestAnimationFrame(frame);
 
@@ -219,6 +240,7 @@
     UI.noteQueue = [];
     UI._guideShown = UI._guideEnd = null;
     Network.rebuild(Game.s);
+    UI.openPlate();
     UI.upgKey = null;
     UI.achKey = null;
     UI.update();
@@ -228,6 +250,8 @@
     Game.pendingNotes.clear();
     UI.noteQueue = [];
     Network.rebuild(Game.s);
+    UI.openPlate();
+    afterMigration();
     if (Game.s.rival) Network.startRival(Game.s.rival);
     UI.upgKey = null;
     UI.achKey = null;

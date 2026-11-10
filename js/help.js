@@ -141,7 +141,6 @@ const HELP = {
     return {
       title: t('res.nutrients').replace(/^./, c => c.toUpperCase()),
       html: tipP(t('help.nutrients')) + tipRows([
-        tipRow(t('help.cycle'), fmt(st.totalEarned)),
         tipRow(t('help.allTime'), fmt(st.allTimeEarned)),
         tipRow(t('help.click'), '+' + fmt(Game.clickValue(), 1)),
       ]),
@@ -183,14 +182,16 @@ const HELP = {
   },
   spores() {
     const per = Game.sporeBonusPer() * 100, pc = isEn() ? '%' : ' %';
-    return {
-      title: t('help.sporesTitle'),
-      html: tipP(t('help.sporesBody', { p: fmtDec(per) })) + tipRows([
-        tipRow(t('help.sporeBonus'), '+' + fmt(Game.s.spores * per) + pc),
-        tipRow(t('help.toSpend'), fmt(Game.sporesAvailable())),
-        tipRow(t('help.nextSpore'), '+' + fmt(Game.prestigeGain())),
-      ]),
-    };
+    const pr = Game.sporeProgress();
+    const rows = [
+      tipRow(t('help.sporeBonus'), '+' + fmt(Game.s.spores * per) + pc),
+      tipRow(t('help.toSpend'), fmt(Game.sporesAvailable())),
+      tipRow(t('help.nextSpore'), isFinite(pr.next) ? t('help.atTotal', { n: fmt(pr.next) }) : t('help.capped')),
+      tipRow(t('help.nextFruit'), t('help.fruitAt', { n: fmt(Game.s.nextFruit) })),
+    ];
+    if (Game.relic('resin')) rows.push(tipRow(t('help.resin'), '×1,5'.replace(',', isEn() ? '.' : ',')));
+    if (Game.s.sporeLegacy > 0) rows.push(tipRow(t('help.sporeLegacy'), fmt(Game.s.sporeLegacy)));
+    return { title: t('help.sporesTitle'), html: tipP(t('help.sporesBody', { p: fmtDec(per) })) + tipRows(rows) };
   },
   amber() {
     const have = Game.s.spores, next = amberNeeded(amberFor(have) + 1);
@@ -224,12 +225,9 @@ const HELP = {
     const sm = Game.sugarParts()[0].m;
     if (sm !== 1) rows.push(tipRow(t('help.sugarMult'), tipMult(sm), sm >= 1 ? 'up' : 'down'));
     if (se.droughtChance && !Game.chalDone('desert')) rows.push(tipRow(t('help.droughtRisk'), Math.round(se.droughtChance * 100) + (isEn() ? '%' : ' %')));
-    const locked = Game.inChal('winter');
-    if (!locked) {
-      rows.push(tipRow(t('help.left'), fmtTime((1 - Game.seasonProgress()) * SEASON_DURATION)));
-      rows.push(tipRow(t('help.then'), seasonLabel(SEASONS[(idx + 1) % SEASONS.length])));
-    }
-    return { title: seasonLabel(se), html: tipP(locked ? t('help.seasonLocked') : t('help.seasonBody')) + tipRows(rows) };
+    rows.push(tipRow(t('help.left'), fmtTime((1 - Game.seasonProgress()) * SEASON_DURATION)));
+    rows.push(tipRow(t('help.then'), seasonLabel(SEASONS[(idx + 1) % SEASONS.length])));
+    return { title: seasonLabel(se), html: tipP(t('help.seasonBody')) + tipRows(rows) };
   },
   buff(a) {
     const b = Game.s.buffs[Number(a.dataset.buff)];
@@ -244,7 +242,7 @@ const HELP_BUFFS = ['shower', 'storm', 'boar', 'territory', 'drought'];
 ['gens', 'upgrades', 'achievements', 'prestige', 'amber', 'herbier', 'stats'].forEach(k => {
   HELP['tab-' + k] = () => {
     let html = tipP(t('help.tab.' + k));
-    if (k === 'achievements') html += tipP(t('help.tab.achCount', { n: Game.achCount(), t: ACHIEVEMENTS.length, p: Game.achCount() * 2 }));
+    if (k === 'achievements') html += tipP(t('help.tab.achCount', { n: Game.achCount(), t: Game.achTotal(), p: Game.achCount() * 2 }));
     return { title: t('tab.' + k), html };
   };
 });

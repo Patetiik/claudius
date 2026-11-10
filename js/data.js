@@ -70,12 +70,13 @@ GENERATORS.forEach(g => {
 }));
 
 [
-  { id: 'g0', cost: 5000,  mult: 1.1, need: 2000, req: s => s.stats.totalEarned >= 2000 },
-  { id: 'g1', cost: 1e5,   mult: 1.15, need: 5e4, req: s => s.stats.totalEarned >= 5e4 },
-  { id: 'g2', cost: 5e6,   mult: 1.2, need: 2e6, req: s => s.stats.totalEarned >= 2e6 },
-  { id: 'g3', cost: 2e8,   mult: 1.25, need: 1e8, req: s => s.stats.totalEarned >= 1e8 },
-  { id: 'g4', cost: 1e12,  mult: 1.3, need: 5e11, req: s => s.stats.totalEarned >= 5e11 },
-  { id: 'g5', cost: 1e15,  mult: 1.5, need: 5e14, req: s => s.stats.totalEarned >= 5e14 },
+  // v11 : seuils sur le total depuis toujours (il n'y a plus de cycle)
+  { id: 'g0', cost: 5000,  mult: 1.1, need: 2000, req: s => s.stats.allTimeEarned >= 2000 },
+  { id: 'g1', cost: 1e5,   mult: 1.15, need: 5e4, req: s => s.stats.allTimeEarned >= 5e4 },
+  { id: 'g2', cost: 5e6,   mult: 1.2, need: 2e6, req: s => s.stats.allTimeEarned >= 2e6 },
+  { id: 'g3', cost: 2e8,   mult: 1.25, need: 1e8, req: s => s.stats.allTimeEarned >= 1e8 },
+  { id: 'g4', cost: 1e12,  mult: 1.3, need: 5e11, req: s => s.stats.allTimeEarned >= 5e11 },
+  { id: 'g5', cost: 1e15,  mult: 1.5, need: 5e14, req: s => s.stats.allTimeEarned >= 5e14 },
   { id: 'rain0', cost: 20000, type: 'rain', req: s => s.stats.dropsClicked >= 3 },
   { id: 'season0', cost: 3e5, type: 'season', req: s => s.stats.seasonsSeen >= 4 },
 ].forEach(u => UPGRADES.push({ type: 'global', ...u }));
@@ -98,7 +99,7 @@ const ACHIEVEMENTS = [
   { id: 'a_drop1', check: s => s.stats.dropsClicked >= 1 },
   { id: 'a_drop25', check: s => s.stats.dropsClicked >= 25 },
   { id: 'a_year', check: s => s.stats.seasonsSeen >= 4 },
-  { id: 'a_spore', check: s => s.stats.prestiges >= 1 },
+  { id: 'a_spore', check: s => s.spores >= 1 },   // v11 : « Première spore » (avant : sporuler une fois)
   { id: 'a_spore10', check: s => s.spores >= 10 },
   { id: 'a_sugar1', check: s => s.stats.sugarEarned >= 100 },
   { id: 'a_sugarAll', check: s => SUGAR_UPGRADES.every(u => s.sugarUpg && s.sugarUpg[u.id]) },
@@ -127,15 +128,41 @@ const ACHIEVEMENTS = [
   { id: 'a_herbAll', check: s => herbSpecies(s) >= SPECIMENS.length },
   { id: 'a_herbSeason', check: s => SEASONS.some(se => SPECIMENS.filter(x => x.season === se.id).every(x => s.herbarium && s.herbarium[x.id] > 0)) },
   { id: 'a_herbMax', check: s => SPECIMENS.some(x => s.herbarium && s.herbarium[x.id] >= HERB_MAX_LEVEL) },
+  // V11 : jalon exclusif des joueurs qui ont sporulé avant la v11 (Héritage des anciennes forêts).
+  // exclusive : caché de la liste et du total tant qu'on ne l'a pas.
+  { id: 'a_ancient', exclusive: true, check: s => !!(s.legacy && s.legacy.n >= 1) },
 ];
 
-// Prestige (v6 : racine 4ᵉ au lieu de la racine carrée, sinon les spores s'emballent en fin de partie)
-const PRESTIGE_UNLOCK = 1e6;     // nutriments totaux sur le cycle pour débloquer
-const SPORE_BONUS = 0.05;        // +5 % par spore
-const SPORE_EXP = 1 / 4;
-// m : multiplicateur de spores (ambre, reliques)
-function sporesFor(total, m = 1) { return Math.floor(m * Math.pow(total / PRESTIGE_UNLOCK, SPORE_EXP) + 1e-9); }
-function sporesNeeded(n, m = 1) { return n <= 0 ? 0 : Math.pow(n / m, 1 / SPORE_EXP) * PRESTIGE_UNLOCK; }
+// V11 : sporulation continue. Plus aucune remise à zéro : les spores se libèrent d'elles-mêmes
+// d'après le total produit depuis toujours (stats.allTimeEarned), même hors ligne.
+// Courbe : K × (total / 1 M)^P, réglée au simulateur (.claude/outils/sim.js) pour garder le rythme de la v10.
+// La boucle spores → production → spores est très sensible : en P = 0,30 elle s'emballe déjà.
+const SPORE_UNIT = 1e6;
+const SPORE_EXP = 0.25;
+const SPORE_K = 1.25;
+const SPORE_BONUS = 0.05;        // +5 % de production par spore
+// Plafond de sécurité : au-delà de SPORE_SOFT, la courbe ralentit (racine carrée) ; jamais plus de SPORE_CAP.
+const SPORE_SOFT = 2e5;
+const SPORE_CAP = 1e8;
+function sporeCurve(total) {
+  let c = SPORE_K * Math.pow(Math.max(0, total) / SPORE_UNIT, SPORE_EXP);
+  if (c > SPORE_SOFT) c = SPORE_SOFT * Math.sqrt(c / SPORE_SOFT);
+  return Math.min(SPORE_CAP, c);
+}
+// Total depuis toujours qu'il faut atteindre pour que la courbe vaille c (inverse de sporeCurve)
+function sporeCurveInv(c) {
+  if (c <= 0) return 0;
+  if (c >= SPORE_CAP) return Infinity;
+  if (c > SPORE_SOFT) c = SPORE_SOFT * Math.pow(c / SPORE_SOFT, 2);
+  return SPORE_UNIT * Math.pow(c / SPORE_K, 1 / SPORE_EXP);
+}
+// Grande fructification : à chaque palier de spores, un grand carpophore sort de terre et libère un nuage de spores
+// (purement visuel, rien n'est effacé). Paliers : chaque spore jusqu'à 10, puis tous les +10 %.
+function nextFruitAfter(spores) { return Math.max(spores + 1, Math.ceil(spores * 1.1)); }
+const FRUIT_MIN_GAP = 40;        // secondes au moins entre deux fructifications à l'écran
+// Héritage des anciennes forêts : +2 % de production par sporulation faite avant la v11, au plus +100 %
+const LEGACY_PER = 0.02;
+const LEGACY_MAX = 1;
 
 // Arbre de talents (v2) : achetés avec des spores, conservés pour toujours.
 // Les spores dépensées continuent de compter pour le bonus de production.
@@ -145,7 +172,7 @@ const TALENT_BRANCHES = [
   { id: 'climat' },
 ];
 const TALENTS = [
-  { id: 'germ', branch: 'croissance', icon: '🌱', cost: 1, req: [] },
+  { id: 'germ', branch: 'croissance', icon: '🌱', cost: 1, req: [] },   // v11 : hyphes et rhizomorphes ×3 (avant : 10 hyphes au début de chaque cycle)
   { id: 'vigor', branch: 'croissance', icon: '💪', cost: 2, req: ['germ'] },
   { id: 'heritage', branch: 'croissance', icon: '🧬', cost: 5, req: ['vigor'] },
   { id: 'giant', branch: 'croissance', icon: '🗻', cost: 15, req: ['heritage'] },
@@ -166,20 +193,21 @@ const TALENTS = [
 // ---------- V3 : Sucre ----------
 // Les mycorhizes (et le Wood Wide Web) échangent ton phosphore contre le sucre des arbres.
 const SUGAR_PER_GEN = { myco: 0.1, wwweb: 0.5, continent: 2, lichen: 6, gaia: 25 };
-// Évolutions sucrées : payées en 🍯, perdues à la sporulation (comme les évolutions classiques).
+// Évolutions sucrées : payées en 🍯. Permanentes depuis la v11 (le sucre ne repart plus de zéro), d'où des prix revus.
 // gens : multiplicateurs de production par générateur.
 const SUGAR_UPGRADES = [
-  { id: 'trade', icon: '🤝', cost: 10, gens: { myco: 3 } },
-  { id: 'sap', icon: '🧃', cost: 30, gens: { hyphe: 5, rhizo: 5 } },
-  { id: 'bait', icon: '🌰', cost: 60 },
-  { id: 'starch', icon: '🥔', cost: 100 },
-  { id: 'ferment', icon: '🫧', cost: 250 },
-  { id: 'nectar', icon: '🌼', cost: 500, gens: { lumi: 4, termites: 3 } },
-  { id: 'symb', icon: '♾️', cost: 1500, gens: { wwweb: 3 } },
+  { id: 'trade', icon: '🤝', cost: 15, gens: { myco: 3 } },
+  { id: 'sap', icon: '🧃', cost: 50, gens: { hyphe: 5, rhizo: 5 } },
+  { id: 'bait', icon: '🌰', cost: 120 },
+  { id: 'starch', icon: '🥔', cost: 250 },
+  { id: 'ferment', icon: '🫧', cost: 600 },
+  { id: 'nectar', icon: '🌼', cost: 1500, gens: { lumi: 4, termites: 3 } },
+  { id: 'symb', icon: '♾️', cost: 5000, gens: { wwweb: 3 } },
   // V6
-  { id: 'photo', icon: '🌿', cost: 8000, gens: { lichen: 4, continent: 2 } },
-  { id: 'tide', icon: '🌊', cost: 40000, gens: { abysses: 3, gaia: 2 } },
+  { id: 'photo', icon: '🌿', cost: 30000, gens: { lichen: 4, continent: 2 } },
+  { id: 'tide', icon: '🌊', cost: 150000, gens: { abysses: 3, gaia: 2 } },
 ];
+const FERMENT_STEP = 50;           // Fermentation : +1 % par 50 de sucre en réserve (v11, avant 10), au plus +50 %
 
 // ---------- V3 : événements ----------
 const BOAR_INTERVAL = [150, 300];   // secondes entre deux passages
@@ -187,31 +215,41 @@ const BOAR_STAY = 14;               // temps pour cliquer dessus
 const DROUGHT_DURATION = 45;
 
 // ---------- V4 : espèces ----------
-// Choisie pour le prochain cycle, appliquée à la sporulation. Chaque espèce change le style de jeu.
+// V11 : mutation à tout moment, effet immédiat, au plus une fois par saison. Chaque espèce change le style de jeu.
 // prod : production passive · click : valeur du clic · clickPct : % de prod ajouté au clic
 // gens : multiplicateurs par générateur · sugar · boarFreq/boarReward · dropFreq
 const SPECIES = [
   { id: 'commun', icon: '🍄', unlock: null },
   { id: 'armillaire', icon: '🟤', prod: 2, click: 0.25,
-    unlock: { check: s => s.stats.prestiges >= 1 } },
+    unlock: { check: s => s.spores >= 1 } },
   { id: 'pleurote', icon: '🦪', prod: 0.6, click: 4, clickPct: 0.05,
-    unlock: { check: s => s.stats.prestiges >= 1 } },
+    unlock: { check: s => s.spores >= 1 } },
   { id: 'laccaire', icon: '🟣', sugar: 3, gens: { myco: 2, hyphe: 0.5, rhizo: 0.5 },
     unlock: { check: s => s.achievements.a_sugar1 } },
   { id: 'truffe', icon: '⚫',
     boarFreq: 3, boarReward: 2, dropFreq: 0.5,
-    unlock: { check: s => s.achievements.a_boar1 && s.stats.prestiges >= 3 } },
+    unlock: { check: s => s.achievements.a_boar1 && (s.spores >= 25 || s.stats.prestiges >= 3) } },
 ];
 
-// ---------- V4 : défis ----------
-// Lancer un défi fait sporuler (en gardant les spores gagnées). Atteindre l'objectif sur le cycle
-// le réussit et donne une récompense permanente. On peut l'abandonner à tout moment.
+// ---------- V4 → V11 : planches d'épreuve ----------
+// Un petit réseau à part, avec sa contrainte et son objectif, qui pousse À CÔTÉ du réseau principal sans le toucher
+// (avant la v11, un défi faisait sporuler). Réussir donne une récompense permanente ; abandonner ne coûte rien.
+// Modèle générique de « planche », prévu pour resservir aux biomes de la v12 :
+//   gens  : générateurs qu'on peut y faire pousser (PLATE_GENS par défaut)
+//   goal  : nutriments à produire sur la planche · rule : contrainte de la planche
+//     rule.noClick (toucher la planche ne rapporte rien) · rule.season (saison figée sur la planche)
+//     rule.prod (multiplicateur de production) · rule.noSpores (ni spores, ni talents, ni héritage)
+// La planche hérite des évolutions et des bonus permanents du réseau principal (c'en est une bouture),
+// mais ce qu'elle produit ne compte pas pour les spores.
+const PLATE_GENS = ['hyphe', 'rhizo', 'litiere', 'myco', 'termites', 'wwweb', 'lumi', 'continent'];
+const PLATE_CLICK_PCT = 0.05;   // toucher une planche : 1 + 5 % de sa production
+const TRIAL_UNLOCK = 5;         // spores pour débloquer les planches d'épreuve
 const CHALLENGES = [
-  { id: 'noclick', icon: '🤐', goal: 1e6 },
-  { id: 'solo', icon: '🧵', goal: 2e6 },
-  { id: 'winter', icon: '❄️', goal: 5e6 },
-  { id: 'desert', icon: '🏜️', goal: 1e7 },
-  { id: 'amnesia', icon: '🫥', goal: 5e7 },
+  { id: 'noclick', icon: '🤐', goal: 1e6, rule: { noClick: true } },
+  { id: 'solo', icon: '🧵', goal: 2e6, rule: {}, gens: ['hyphe', 'rhizo', 'litiere'] },
+  { id: 'winter', icon: '❄️', goal: 5e6, rule: { season: 'hiver' } },
+  { id: 'desert', icon: '🏜️', goal: 1e7, rule: { prod: 0.5 } },
+  { id: 'amnesia', icon: '🫥', goal: 5e7, rule: { noSpores: true } },
 ];
 
 // ---------- V6 : événements ----------
@@ -222,7 +260,7 @@ const RIVAL_DURATION = 45;          // temps pour la repousser
 const RIVAL_HP = 30;                // clics nécessaires
 const RIVAL_STEAL = 0.75;           // production ×0,75 tant qu'elle est là
 // Poussée de carpophores : en automne, de petits champignons sortent du sol, à cueillir.
-const FLUSH_CHANCE = 0.6;           // chance à chaque automne (après la 1ʳᵉ sporulation)
+const FLUSH_CHANCE = 0.6;           // chance à chaque automne (dès la 1ʳᵉ spore)
 const FLUSH_COUNT = 7;
 const FLUSH_STAY = 22;
 
@@ -235,6 +273,7 @@ function amberFor(spores) { return Math.floor(Math.sqrt(spores / FOSSIL_UNLOCK) 
 function amberNeeded(n) { return n * n * FOSSIL_UNLOCK; }
 
 // Reliques : achetées avec l'ambre, conservées pour toujours.
+// v11 : Banque de graines (générateurs −25 %) et Sève fossile (sucre ×2, sucre hors ligne à 100 %) changent d'effet.
 const RELICS = [
   { id: 'seedbank', icon: '🫙', cost: 1 },
   { id: 'instinct', icon: '🧠', cost: 1 },
@@ -292,8 +331,8 @@ function herbSpecies(s) { return SPECIMENS.filter(x => s.herbarium && s.herbariu
 // known : le joueur connaît déjà la mécanique (anciennes sauvegardes : la note est marquée lue au chargement)
 const LONG_PLAY = 1800;   // 30 min de jeu : un événement débloqué depuis si longtemps a forcément déjà été vu
 const NOTES = [
-  { id: 'buy', check: s => GENERATORS.some(g => s.gens[g.id] > 0) || s.stats.prestiges > 0 },
-  { id: 'upgrade', check: (s, g) => Object.keys(s.upgrades).length > 0 || g.availableUpgrades().some(u => u.cost <= s.nutrients) || s.stats.prestiges > 0 },
+  { id: 'buy', check: s => GENERATORS.some(g => s.gens[g.id] > 0) || s.spores > 0 },
+  { id: 'upgrade', check: (s, g) => Object.keys(s.upgrades).length > 0 || g.availableUpgrades().some(u => u.cost <= s.nutrients) || s.spores > 0 },
   { id: 'drop', event: 'drop', known: s => s.stats.dropsClicked > 0 || s.stats.playTime > LONG_PLAY },
   { id: 'season', check: s => s.stats.seasonsSeen >= 2 },
   { id: 'achievement', check: s => Object.keys(s.achievements).length >= 2 },
@@ -302,11 +341,16 @@ const NOTES = [
   { id: 'drought', event: 'drought', known: s => s.stats.droughts > 0 || (s.stats.sugarEarned > 0 && s.stats.playTime > LONG_PLAY) },
   { id: 'specimen', check: s => herbSpecies(s) > 0 },
   { id: 'glow', event: 'glow', known: s => s.stats.glows > 0 || (herbSpecies(s) > 0 && s.stats.playTime > LONG_PLAY) },
-  { id: 'sporeReady', check: s => s.stats.totalEarned >= PRESTIGE_UNLOCK || s.stats.prestiges > 0 },
+  // v11 : « bientôt des spores » (à mi-chemin de la 1ʳᵉ), puis la 1ʳᵉ spore
+  { id: 'sporeReady', check: s => s.stats.allTimeEarned >= sporeCurveInv(0.5) || s.spores > 0 },
   { id: 'spores', check: s => s.spores > 0 },
   { id: 'rival', event: 'rival', known: s => s.stats.rivals > 0 || (s.gens.wwweb > 0 && s.stats.playTime > LONG_PLAY) },
-  { id: 'flush', event: 'flush', known: s => s.stats.flushPicked > 0 || (s.stats.prestiges > 0 && s.stats.playTime > LONG_PLAY) },
+  { id: 'flush', event: 'flush', known: s => s.stats.flushPicked > 0 || (s.spores > 0 && s.stats.playTime > LONG_PLAY) },
   { id: 'amber', check: s => s.amber > 0 },
+  { id: 'fruiting', event: 'fruiting', known: s => false },
+  // v11
+  { id: 'mutation', check: s => s.spores >= 1 },
+  { id: 'trial', check: s => s.spores >= TRIAL_UNLOCK },
 ];
 
 // Objectifs guidés des premières minutes, affichés un par un sous les ressources, puis plus jamais.

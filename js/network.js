@@ -286,7 +286,105 @@ const Network = {
       k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
     ctx.closePath(); ctx.fill();
+    // Spore dorée (V11, Héritage des anciennes forêts) : décor seulement, elle tourne lentement autour du cœur
+    if (state.legacy) {
+      const a = t * 0.16, d = r * 1.05, gx = Math.cos(a) * d, gy = Math.sin(a) * d * 0.8, gr = r * 0.34;
+      const gl = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr * 3.2);
+      gl.addColorStop(0, 'rgba(255,226,140,0.55)');
+      gl.addColorStop(1, 'rgba(255,226,140,0)');
+      ctx.fillStyle = gl;
+      ctx.beginPath(); ctx.arc(gx, gy, gr * 3.2, 0, Math.PI * 2); ctx.fill();
+      const gb = ctx.createRadialGradient(gx - gr * 0.3, gy - gr * 0.35, 0, gx, gy, gr);
+      gb.addColorStop(0, '#fff8d8'); gb.addColorStop(0.5, '#f4cf5e'); gb.addColorStop(1, '#a8761f');
+      ctx.fillStyle = gb;
+      ctx.beginPath(); ctx.ellipse(gx, gy, gr, gr * 0.78, a + 0.6, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(60,36,10,0.55)'; ctx.lineWidth = 0.6 / sc; ctx.stroke();
+    }
     ctx.restore();
+  },
+
+  // ---------- Grande fructification (V11) ----------
+  // À chaque palier de spores, un grand carpophore sort de terre à la surface et libère un nuage de spores.
+  // Purement visuel : rien n'est effacé. Avec les animations réduites, il apparaît d'un coup, sans mouvement.
+  FRUIT_LIFE: 10,
+  fruits: [],
+  fruit() {
+    this.fruits.push({ t0: performance.now() / 1000, x: 0.5 + (Math.random() - 0.5) * 0.36, seed: (Math.random() * 1e9) >>> 0 });
+    if (this.fruits.length > 2) this.fruits.shift();
+  },
+  drawFruits(sy) {
+    if (!this.fruits.length) return;
+    const ctx = this.ctx, now = performance.now() / 1000, D = this.FRUIT_LIFE;
+    const life = this.reduced ? 5 : D;
+    this.fruits = this.fruits.filter(f => now - f.t0 < life);
+    const cl = v => Math.min(1, Math.max(0, v));
+    const ease = v => 1 - Math.pow(1 - cl(v), 3);
+    for (const f of this.fruits) {
+      const age = now - f.t0, x = this.w * f.x;
+      const rise = this.reduced ? 1 : ease(age / 1.6), open = this.reduced ? 1 : ease((age - 1.1) / 1.3);
+      const fade = this.reduced ? cl((life - age) / 1) : 1 - cl((age - (D - 1.8)) / 1.8);
+      const H = Math.max(30, Math.min(sy - 24, 96)) * rise;
+      const sway = this.reduced ? 0 : Math.sin(age * 1.3) * 1.5 * open;
+      const top = { x: x + sway, y: sy - H };
+      const R = (8 + 19 * open) * (0.6 + 0.4 * rise);
+      ctx.save();
+      ctx.globalAlpha = fade;
+      // halo au pied et autour du chapeau
+      const halo = ctx.createRadialGradient(top.x, top.y, 0, top.x, top.y, R * 2.6);
+      halo.addColorStop(0, 'rgba(255,238,200,0.28)');
+      halo.addColorStop(1, 'rgba(255,238,200,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(top.x, top.y, R * 2.6, 0, Math.PI * 2); ctx.fill();
+      // pied ivoire, légèrement courbe, plus épais à la base
+      const st = ctx.createLinearGradient(x - 4, 0, x + 4, 0);
+      st.addColorStop(0, '#cdbd9c'); st.addColorStop(0.45, '#f6eedb'); st.addColorStop(1, '#bba987');
+      ctx.fillStyle = st;
+      ctx.beginPath();
+      ctx.moveTo(x - 4.2, sy + 1);
+      ctx.quadraticCurveTo(x - 3 + sway * 0.4, sy - H * 0.55, top.x - 2.4, top.y + 2);
+      ctx.lineTo(top.x + 2.4, top.y + 2);
+      ctx.quadraticCurveTo(x + 3 + sway * 0.4, sy - H * 0.55, x + 4.2, sy + 1);
+      ctx.closePath(); ctx.fill();
+      // anneau
+      if (open > 0.3) {
+        ctx.strokeStyle = 'rgba(240,230,205,0.8)'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.ellipse(top.x, top.y + H * 0.22, 4.2, 1.4, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      // chapeau : œuf fermé qui s'ouvre en ombrelle
+      const capH = R * (0.95 - 0.5 * open);
+      const cg = ctx.createRadialGradient(top.x - R * 0.3, top.y - capH * 0.7, 0, top.x, top.y, R * 1.1);
+      cg.addColorStop(0, '#fbf3df'); cg.addColorStop(0.6, '#e6d1a6'); cg.addColorStop(1, '#a98657');
+      ctx.fillStyle = cg;
+      ctx.beginPath(); ctx.ellipse(top.x, top.y, R, capH, 0, Math.PI, 0); ctx.closePath(); ctx.fill();
+      // lames sous le chapeau
+      ctx.fillStyle = 'rgba(90,64,40,0.55)';
+      ctx.beginPath(); ctx.ellipse(top.x, top.y, R * 0.96, R * 0.16 * open + 0.6, 0, 0, Math.PI); ctx.fill();
+      // écailles
+      ctx.fillStyle = 'rgba(150,110,70,0.35)';
+      for (let k = 0; k < 5; k++) {
+        const a = Math.PI * (1.15 + k * 0.17);
+        ctx.beginPath(); ctx.arc(top.x + Math.cos(a) * R * 0.62, top.y + Math.sin(a) * capH * 0.62, 1.1, 0, Math.PI * 2); ctx.fill();
+      }
+      // nuage de spores : parti des lames, emporté par le vent
+      const rng = seededRng(f.seed);
+      ctx.globalCompositeOperation = 'lighter';
+      // la plupart retombent en pluie fine sur la planche, au-dessus du réseau
+      const dir = rng() < 0.5 ? -1 : 1;
+      for (let k = 0; k < 140; k++) {
+        const born = 2 + rng() * 3.2, ph = rng() * 6.28, vx = dir * (8 + rng() * 30) * (rng() < 0.25 ? -0.6 : 1), vy = (rng() - 0.7) * 22, ox = (rng() - 0.5) * R * 1.7;
+        const sz = 0.8 + rng() * 1.5, gold = rng() < 0.18;
+        let pa = this.reduced ? 0.5 + rng() * 3 : age - born;
+        if (pa <= 0) continue;
+        const a = fade * cl(1 - pa / 5.5) * cl(pa * 3) * 0.85;
+        if (a <= 0) continue;
+        const px = top.x + ox + vx * pa + Math.sin(pa * 1.7 + ph) * 5;
+        const py = top.y + 1 - vy * pa + Math.cos(pa * 1.3 + ph) * 3;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = gold ? '#ffd98a' : '#f4ecd6';
+        ctx.beginPath(); ctx.arc(px, py, sz, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
   },
 
   // ---------- Colonie rivale (V6) ----------
@@ -507,6 +605,7 @@ const Network = {
     ctx.globalAlpha = 1;
 
     this.drawWeather(id, dry, sy, t);
+    this.drawFruits(sy);
   },
 
   // Emplacements des rochers de lichen : entre les arbres, du centre vers les bords
@@ -670,5 +769,24 @@ const Network = {
       else ctx.arc(x, y, size, 0, Math.PI * 2);
       ctx.fill();
     }
+  },
+};
+
+// ---------- Planche d'épreuve (V11) ----------
+// Une 2ᵉ planche dessinée comme la principale, sur son propre canvas, avec son propre réseau.
+// Prévue pour resservir aux biomes de la v12 : PlateView.make(canvas) crée une vue indépendante.
+const PlateView = {
+  make(canvas) {
+    const v = Object.create(Network);
+    Object.assign(v, { nodes: [], pulses: [], fruits: [], rival: null, view: { scale: 1 }, bounds: { maxX: 1, maxY: 1, minY: 0 },
+      corePulse: 0, layerDirty: true, layerScale: 0, plateId: null });
+    v.init(canvas);
+    return v;
+  },
+  // Le dessin de surface lit state.gens : on lui passe ceux de la planche
+  fakeState(p) {
+    const gens = {};
+    for (const g of GENERATORS) gens[g.id] = (p && p.gens[g.id]) || 0;
+    return { gens, legacy: null };
   },
 };

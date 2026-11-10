@@ -4,6 +4,26 @@
 // (pas de jargon technique), et la traduire dans le fichier de traduction si besoin.
 const CHANGELOG = [
   {
+    version: '11.0', date: '2026-11-10', title: 'Sporulation continue',
+    summary: 'Plus aucune remise à zéro : ton réseau reste, et tes spores se libèrent toutes seules. Tu gardes toutes celles que tu avais.',
+    added: [
+      'Spores continues : elles se libèrent d’elles-mêmes d’après tout ce que ton réseau a produit depuis toujours, même jeu fermé. La barre « Prochaine spore » de l’onglet Sporulation montre où tu en es.',
+      'Grande fructification : à chaque palier de spores, un grand champignon sort de terre et lâche un nuage de spores. C’est juste beau à regarder : rien n’est effacé.',
+      'Mutation : change d’espèce quand tu veux, l’effet est immédiat (une mutation par saison).',
+      'Planches d’épreuve : les défis deviennent de petits réseaux à part, qui poussent à côté du tien sans le toucher, même jeu fermé. Les récompenses déjà gagnées restent.',
+      'Pour celles et ceux qui ont sporulé avant cette version : l’Héritage des anciennes forêts (+2 % de production par sporulation passée, jusqu’à +100 %, un jalon et un titre réservés, une spore dorée au cœur du réseau).',
+    ],
+    changed: [
+      'Tes spores sont toutes conservées, et les nouvelles s’ajoutent tout de suite à partir de là. Ton réseau actuel devient définitif.',
+      'Le sucre et les évolutions sucrées sont permanents ; leurs prix ont été revus en conséquence.',
+      'Germination rapide (hyphes et rhizomorphes ×3), Banque de graines (générateurs 25 % moins chers) et Sève fossile (sucre à 100 % hors ligne) ont de nouveaux effets, utiles sans cycle. Ceux qui les possédaient les gardent.',
+      'Ce qui se comptait « sur ce cycle » se compte désormais au total ; les espèces et la poussée de carpophores se débloquent avec tes spores.',
+    ],
+    removed: [
+      'La sporulation qui remettait tout à zéro, et le bouton « Sporuler ». Un défi en cours au moment de la mise à jour est annulé, sans pénalité.',
+    ],
+  },
+  {
     version: '10.0', date: '2026-11-10', title: 'Premières pages',
     summary: 'Des notes de terrain, des objectifs et une aide « ? » pour bien démarrer, des réglages, et le jeu en anglais.',
     added: [
