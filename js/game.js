@@ -201,7 +201,7 @@ const Game = {
   catchBoar() {
     this.s.stats.boars++;
     const gain = Math.max(this.nps() * 90, this.clickValue() * 50, 100) * (this.sp().boarReward || 1) * this.herbKind('boar');
-    this.earn(gain);
+    this.earnActive(gain);
     this.addBuff('prod', 2, 45, 'buff.boar');
     const msg = t('log.boar', { gain: fmt(gain) });
     this.emit('log', msg);
@@ -333,9 +333,24 @@ const Game = {
     this.s.stats.totalEarned += n;
     this.s.stats.allTimeEarned += n;
   },
+  // Gains du joueur actif (clics, sanglier, gouttes, carpophores, colonie repoussée) : notés pour l'affichage du /s (v10.1)
+  ACTIVE_WINDOW: 5,
+  activeLog: [],
+  earnActive(n) {
+    this.earn(n);
+    if (n > 0) this.activeLog.push([Date.now(), n]);
+  },
+  // Revenu actif moyen sur les 5 dernières secondes. Affichage seulement : jamais utilisé par nps(),
+  // le clic (qui gagne un % de nps()), le hors-ligne ni les jalons, sinon tout s'emballerait.
+  activeRate() {
+    const from = Date.now() - this.ACTIVE_WINDOW * 1000;
+    while (this.activeLog.length && this.activeLog[0][0] < from) this.activeLog.shift();
+    return this.activeLog.reduce((a, e) => a + e[1], 0) / this.ACTIVE_WINDOW;
+  },
+  displayRate() { return this.nps() + this.activeRate(); },
   click() {
     const v = this.clickValue();
-    this.earn(v);
+    this.earnActive(v);
     this.s.stats.clicks++;
     this.lastActive = Date.now();
     this.s.stats.clickEarned += v;
@@ -406,7 +421,7 @@ const Game = {
       msg = t('log.shower', { d });
     } else if (r < 0.85) {
       const gain = Math.max(this.nps() * 120, this.clickValue() * 25, 20);
-      this.earn(gain);
+      this.earnActive(gain);
       msg = t('log.puddle', { gain: fmt(gain) });
     } else {
       const d = this.has('frenzy') ? 24 : 12;
@@ -530,7 +545,7 @@ const Game = {
     this.s.rival = null;
     this.s.stats.rivals++;
     const gain = Math.max(this.nps(true) * 120, this.clickValue() * 40, 500);
-    this.earn(gain);
+    this.earnActive(gain);
     this.addBuff('prod', 1.5, 90, 'buff.territory');
     this.emit('rivalEnd', { won: true, gain });
     this.emit('log', t('log.rivalWon', { gain: fmt(gain) }));
@@ -542,7 +557,7 @@ const Game = {
     this.lastActive = Date.now();
     this.s.stats.flushPicked++;
     const gain = Math.max(this.nps() * 20, this.clickValue() * 10, 50) * (this.has('mycophagy') ? 2 : 1) * this.herbKind('flush');
-    this.earn(gain);
+    this.earnActive(gain);
     return gain;
   },
 

@@ -585,7 +585,10 @@ const UI = {
     const s = Game.s;
     const nps = Game.nps();
     $('nutrients').textContent = fmt(s.nutrients);
-    $('nps').textContent = fmt(nps, nps < 100 ? 1 : 0);
+    // /s affiché : production passive + revenu des clics et cueillettes des 5 dernières secondes (v10.1)
+    const act = Game.activeRate(), shown = nps + act;
+    $('nps').textContent = fmt(shown, shown < 100 ? 1 : 0);
+    $('nps-click').textContent = act > 0 && act >= shown * 0.01 ? t('res.clickRate', { v: fmt(act, act < 100 ? 1 : 0) }) : '';
 
     // Spores
     $('spores-box').classList.toggle('hidden', s.spores <= 0);

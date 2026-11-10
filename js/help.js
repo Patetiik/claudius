@@ -150,6 +150,9 @@ const HELP = {
   nps() {
     const b = Game.prodBreakdown();
     let html = tipP(t('help.nps'));
+    const act = Game.activeRate();
+    if (act > 0) html += tipRows([tipRow(t('help.passive'), rate(b.total)), tipRow(t('help.active'), rate(act)),
+      tipRow(t('help.shown'), rate(b.total + act), 'total')]) + tipP(`<span class="tip-note">${t('help.activeNote')}</span>`);
     if (!b.gens.length) return { title: t('help.npsTitle'), html: html + tipP(t('help.none')) };
     const top = b.gens.slice(0, 5).map(x => tipRow(t('help.genLine', { name: x.g.name, n: x.n }), rate(x.prod)));
     if (b.gens.length > 5) {

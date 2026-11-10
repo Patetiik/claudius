@@ -15,6 +15,7 @@ const CHANGELOG = [
       'Notes de version : ce bandeau à chaque nouvelle version, et tout l’historique dans le Carnet.',
     ],
     changed: [
+      'La production par seconde affichée compte aussi ce que rapportent tes clics du moment (« dont … de clics »).',
       'Les premières minutes vont plus vite : le champignon de litière et la mycorhize de chêne coûtent moins cher.',
       'La fenêtre « Bon retour » détaille ce que ton réseau a produit et rapporté pendant ton absence.',
     ],

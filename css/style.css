@@ -648,3 +648,7 @@ html.reduce-motion .note-card, html.reduce-motion .guide-bar i, html.reduce-moti
 .cl-k.cl-fixed { color: var(--ink2); }
 .changelog ul { margin: 0; padding-left: 18px; color: var(--ink2); font-size: calc(13px * var(--fs)); }
 .changelog li { margin: 2px 0; }
+/* v10.1 : part des clics dans le /s affiché */
+.res-click { font: italic calc(12px * var(--fs)) var(--serif); color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.res-click:empty { min-height: 0; }
+.tip-note { font-size: calc(11px * var(--fs)); color: var(--muted); font-style: italic; }

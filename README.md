@@ -197,6 +197,10 @@ Une version d’accueil pour les nouveaux venus, sans nouvelle mécanique de jeu
   1ʳᵉ mycorhize à 9 min (au lieu de 10 min 23), litière à 4 min 18 (au lieu de 6 min 16, fin du trou de 3–4 min sans
   nouveauté) ; environ 60 nouveautés en 30 min. Joueur très actif : mycorhize à 7 min 36. À 2 h, les mêmes générateurs
   qu’avant : l’avance du début se dissipe.
+- **Production affichée avec les clics** (v10.1, remarque de Nicolas) : le « /s » sous les nutriments = production passive +
+  revenu des clics et cueillettes actives (réseau, sanglier, gouttes, carpophores, colonie repoussée) sur les 5 dernières
+  secondes, avec « dont … de clics » et le détail dans l’infobulle. Affichage seulement : `Game.nps()`, le clic (qui gagne
+  un % de `nps()`), le hors-ligne et les jalons n’en tiennent pas compte (`Game.displayRate()`, `Game.activeRate()`).
 - **Bon retour détaillé** : durée d’absence (et durée comptée si le plafond est atteint), nutriments rapportés et part des
   4 générateurs qui ont le plus produit, sucre, spécimens rapportés (espèce, nouvelle ou niveau atteint), équivalent en
   production en direct, rappel que rien n’a été perdu et du taux hors ligne.
