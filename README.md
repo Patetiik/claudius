@@ -15,7 +15,7 @@ ou servir le dossier : `python3 -m http.server 8765 --bind 127.0.0.1`.
 - **Saisons** (90 s chacune) qui boostent ou freinent certains générateurs.
 - **Gouttes de pluie 💧** aléatoires : ondée (×3), flaque (gain instantané) ou orage (clic ×15).
 - **Évolutions** : ×2/×3 par générateur, clic en % de la prod, bonus globaux.
-- **Jalons** (41 en v6) : +2 % de production chacun.
+- **Jalons** (46 en v9) : +2 % de production chacun.
 - **Sporulation** (prestige, dès 1 M) : spores = (total du cycle / 1 M)^¼, +5 % chacune (racine carrée avant la v6).
 - Sauvegarde auto (localStorage, 10 s) + gains hors-ligne (50 %, 8 h max).
 
@@ -147,6 +147,26 @@ Lot technique, sans nouveau contenu ni changement de gameplay.
   hors connexion, deux onglets, sauvegardes v1, v7 et codes `CLAUDIUS2:`/`CLAUDIUS6:`. Pas encore testé sur un vrai
   Firefox, Safari ou Android.
 
+## Nouveautés v9 — l’herbier
+Une couche de collection cumulative, sans aucune remise à zéro, qui avance toute seule.
+- **Herbier** (nouvel onglet) : 12 espèces réelles, 3 par saison, chacune avec sa planche dessinée à la plume (SVG),
+  son nom latin et une note de carnet. Printemps : Morille, Pézize orangée, Tricholome de la Saint-Georges. Été : Girolle,
+  Cèpe de Bordeaux, Amanite des Césars. Automne : Coprin chevelu, Trompette de la mort, Clathre rouge. Hiver : Mycène
+  lumineuse, Pied bleu, Polypore du bouleau.
+- **Prospection** : le réseau fouille la forêt tout seul (barre « Prospection » sous les ressources) et rapporte un
+  spécimen de la saison en cours : environ toutes les 7 min au début, plus vite quand la production grandit (≈ 2 min en fin
+  de partie). Elle continue **hors ligne** (au taux hors ligne) ; la fenêtre « Bon retour » liste les espèces rapportées.
+  S’il n’y a rien de nouveau à trouver dans la saison, la barre attend à 100 % la saison suivante.
+- **Niveaux** : chaque espèce monte jusqu’au niveau 5. Chaque niveau donne **+3 % de production** (jusqu’à ×2,8 pour
+  l’herbier complet) et l’effet propre à l’espèce (+20 % sur un générateur, ou sucre, clic, pluie, sanglier,
+  carpophores). Les espèces encore inconnues restent en **aperçu grisé**, avec leur saison et le générateur qu’elles
+  demandent. L’herbier est conservé aux sporulations.
+- **Lueur dans la litière** (dès le 1ᵉʳ spécimen, toutes les 3 à 6 min, 12 s pour la toucher) : un spécimen trouvé
+  aussitôt, **même hors saison**. La rater ne coûte rien.
+- **Relique « Loupe de naturaliste »** (4 ambre) : prospection 2× plus rapide.
+- **5 jalons** : Première planche, Herbier de poche, Flore complète, Une saison sous la loupe, Spécimen de référence.
+- Sauvegarde v7 (codes d’export `CLAUDIUS7:…`). Les parties et codes v1 à v8 se chargent tels quels, avec un herbier vide.
+
 ## Publier une mise à jour
 1. Modifier le jeu, le tester en local sur `http://127.0.0.1:8765/?sandbox=test`.
 2. Changer le numéro de version (sinon les joueurs peuvent garder l’ancienne version en cache) :
@@ -156,7 +176,7 @@ Lot technique, sans nouveau contenu ni changement de gameplay.
 4. Vérifier sur https://patetiik.github.io/claudius/?sandbox=test (jamais sur ta vraie partie).
 
 ## Structure
-- `js/data.js` — tout le contenu (générateurs, saisons, évolutions, jalons, talents, sucre, événements, ambre et reliques) : c'est ici qu'on ajoute.
+- `js/data.js` — tout le contenu (générateurs, saisons, évolutions, jalons, talents, sucre, événements, ambre et reliques, herbier) : c'est ici qu'on ajoute.
 - `js/game.js` — logique pure et sauvegarde.
 - `js/network.js` — rendu canvas du réseau.
 - `js/ui.js`, `js/main.js` — interface et boucles.
@@ -171,3 +191,4 @@ Lot technique, sans nouveau contenu ni changement de gameplay.
 - ~~v6 : fin de partie (3 générateurs), ambre et reliques (sans remise à zéro), événements « Colonie rivale » et « Poussée de carpophores », rééquilibrage des spores.~~ ✅
 - ~~v7 : lisibilité de la surface : carpophores à cueillir bien distincts des champignons de litière, rochers de lichen plus visibles ; retours de Nicolas après test en jeu réel et sur iPhone (rien à signaler).~~ ✅
 - ~~v8 : jeu jouable par d’autres personnes, sur n’importe quel appareil (pas seulement iPhone) : hébergement public, navigateurs et écrans variés (ordinateur, Android, tablette), sauvegarde propre à chaque joueur.~~ ✅
+- ~~v9 : herbier (collection cumulative de 12 espèces, prospection automatique même hors ligne, lueurs dans la litière, relique Loupe de naturaliste).~~ ✅

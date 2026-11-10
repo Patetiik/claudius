@@ -9,8 +9,8 @@ const SANDBOX = (() => {
 const SAVE_KEY = 'claudius-save-v1' + (SANDBOX ? ':sandbox:' + SANDBOX : '');
 const BACKUP_KEY = SAVE_KEY + ':backup';    // la partie la plus avancée jamais vue
 const CORRUPT_KEY = SAVE_KEY + ':corrupt';  // copie brute d'une sauvegarde illisible
-const SAVE_VERSION = 6;
-const EXPORT_PREFIX = 'CLAUDIUS6:';
+const SAVE_VERSION = 7;
+const EXPORT_PREFIX = 'CLAUDIUS7:';
 const NET_LOG_MAX = 900;   // = MAX_BRANCHES du rendu
 const EXPORT_PREFIX_RE = /^CLAUDIUS\d+:/;  // accepte aussi les codes v2
 
@@ -33,6 +33,9 @@ function freshState(keep) {
     cycleSeasons: 0,   // saisons vécues sur ce cycle (talent Aurore)
     rival: null,       // colonie rivale en cours : { hp, max, left, seed }
     nextRival: 200,
+    herbarium: {},     // V9 : niveau de chaque espèce trouvée (jamais remis à zéro)
+    prospect: 0,       // V9 : avancement de la prospection (0 → 1 = une trouvaille)
+    nextGlow: 240,     // V9 : prochaine lueur dans la litière
     // Réseau dessiné : graine + ordre des branches (1 lettre = 1 branche, 'a' = hyphe…).
     // Rejouer ce journal avec la même graine redonne exactement le même dessin.
     netSeed: (Math.random() * 4294967296) >>> 0,
@@ -45,6 +48,7 @@ function freshState(keep) {
       seasonsSeen: 1, prestiges: 0, playTime: 0, clickEarned: 0,
       sugarEarned: 0, boars: 0, droughts: 0,
       rivals: 0, flushPicked: 0, fossils: 0,
+      specimens: 0, glows: 0,
     },
     seasonClock: 0,
     buffs: [],
@@ -55,6 +59,16 @@ function freshState(keep) {
   GENERATORS.forEach(g => s.gens[g.id] = 0);
   if (keep) Object.assign(s, keep);
   return s;
+}
+
+// Herbier d'une sauvegarde : seulement les espèces connues, niveaux entiers de 0 à 5
+function cleanHerbarium(h) {
+  const o = {};
+  if (h && typeof h === 'object') for (const x of SPECIMENS) {
+    const n = Math.floor(Number(h[x.id]) || 0);
+    if (n > 0) o[x.id] = Math.min(HERB_MAX_LEVEL, n);
+  }
+  return o;
 }
 
 const Game = {
@@ -156,6 +170,7 @@ const Game = {
     if (this.sug('symb')) r *= 3;
     if (this.relic('sapfossil')) r *= 2;
     if (this.droughtActive()) r *= 0.5;
+    r *= this.herbKind('sugar');
     return r;
   },
   fermentMult() {
@@ -181,7 +196,7 @@ const Game = {
   boarInterval() { return rand(...BOAR_INTERVAL) / (this.sug('bait') ? 2 : 1) / (this.sp().boarFreq || 1); },
   catchBoar() {
     this.s.stats.boars++;
-    const gain = Math.max(this.nps() * 90, this.clickValue() * 50, 100) * (this.sp().boarReward || 1);
+    const gain = Math.max(this.nps() * 90, this.clickValue() * 50, 100) * (this.sp().boarReward || 1) * this.herbKind('boar');
     this.earn(gain);
     this.addBuff('prod', 2, 45, '🐗 Spores dispersées : production ×2');
     const msg = `🐗 Le sanglier déterre tes truffes et disperse tes spores : +${fmt(gain)} nutriments, production ×2 pendant 45 s`;
@@ -228,6 +243,7 @@ const Game = {
     if (sp.gens && sp.gens[id]) m *= sp.gens[id];
     if (this.chalDone('solo') && ['hyphe', 'rhizo', 'litiere'].includes(id)) m *= 3;
     if (this.has('colon') && LATE_GENS.includes(id)) m *= 3;
+    m *= this.herbGenMult(id);
     return m;
   },
   achCount() { return Object.keys(this.s.achievements).length; },
@@ -249,6 +265,7 @@ const Game = {
     m *= this.amberMult();
     if (this.relic('planet')) m *= 3;
     if (this.has('aurora')) m *= 1 + Math.min(0.6, 0.02 * this.s.cycleSeasons);
+    m *= this.herbMult();
     return m;
   },
   genUnitProd(id) {
@@ -273,7 +290,7 @@ const Game = {
     let flat = 1, pct = (this.has('acid') ? 0.05 : 0) + (this.sp().clickPct || 0);
     for (const u of UPGRADES) if (u.type === 'click' && this.s.upgrades[u.id]) { flat += u.flat; pct += u.pct; }
     if (this.has('jaws')) flat *= 5;
-    return (flat * (1 + this.sporeBonusPer() * this.s.spores) + pct * this.nps()) * this.buffMult('click') * (this.sp().click || 1);
+    return (flat * (1 + this.sporeBonusPer() * this.s.spores) + pct * this.nps()) * this.buffMult('click') * (this.sp().click || 1) * this.herbKind('click');
   },
 
   // ---------- Gains ----------
@@ -343,7 +360,7 @@ const Game = {
   },
 
   // ---------- Pluie ----------
-  dropInterval() { return rand(60, 140) / (this.s.upgrades.rain0 ? 2 : 1) / (this.has('dew') ? 1.5 : 1) / (this.sp().dropFreq || 1); },
+  dropInterval() { return rand(60, 140) / (this.s.upgrades.rain0 ? 2 : 1) / (this.has('dew') ? 1.5 : 1) / (this.sp().dropFreq || 1) / this.herbKind('drop'); },
   collectDrop() {
     this.lastActive = Date.now();
     this.s.stats.dropsClicked++;
@@ -391,6 +408,9 @@ const Game = {
       amber: old.amber,
       amberSpent: old.amberSpent,
       relics: old.relics,
+      herbarium: old.herbarium,
+      prospect: old.prospect,
+      nextGlow: old.nextGlow,
       sugar: this.relicIn(old, 'sapfossil') ? old.sugar * 0.25 : 0,
     });
     Object.assign(this.s.stats, old.stats, { totalEarned: 0, prestiges: old.stats.prestiges + (gain >= 1 ? 1 : 0) });
@@ -484,9 +504,64 @@ const Game = {
   pickMushroom() {
     this.lastActive = Date.now();
     this.s.stats.flushPicked++;
-    const gain = Math.max(this.nps() * 20, this.clickValue() * 10, 50) * (this.has('mycophagy') ? 2 : 1);
+    const gain = Math.max(this.nps() * 20, this.clickValue() * 10, 50) * (this.has('mycophagy') ? 2 : 1) * this.herbKind('flush');
     this.earn(gain);
     return gain;
+  },
+
+  // ---------- Herbier (V9) ----------
+  // Le réseau prospecte tout seul, hors ligne compris : l'herbier avance même si on ne joue pas.
+  herbLevel(id) { return this.s.herbarium[id] || 0; },
+  herbLevels() { return SPECIMENS.reduce((n, x) => n + this.herbLevel(x.id), 0); },
+  herbMult() { return 1 + HERB_PROD * this.herbLevels(); },
+  herbGenMult(id) {
+    let m = 1;
+    for (const x of SPECIMENS) if (x.gens && x.gens[id]) m += x.gens[id] * this.herbLevel(x.id);
+    return m;
+  },
+  herbKind(kind) {
+    let m = 1;
+    for (const x of SPECIMENS) if (x.kind === kind) m += x.per * this.herbLevel(x.id);
+    return m;
+  },
+  specimenReqMet(x) { return !x.req || this.s.gens[x.req] > 0 || this.herbLevel(x.id) > 0; },
+  // anySeason : la lueur trouve aussi des espèces hors saison
+  findableSpecimens(anySeason) {
+    const season = this.season().id;
+    return SPECIMENS.filter(x => (anySeason || x.season === season) && this.specimenReqMet(x) && this.herbLevel(x.id) < HERB_MAX_LEVEL);
+  },
+  prospectRate() {
+    return (1 + 0.25 * Math.log10(1 + this.nps(true))) / PROSPECT_TIME * (this.relic('loupe') ? 2 : 1);
+  },
+  // Une trouvaille : d'abord les espèces encore jamais vues, sinon la moins avancée
+  findSpecimen(anySeason, quiet) {
+    const list = this.findableSpecimens(anySeason);
+    if (!list.length) return null;
+    const fresh = list.filter(x => !this.herbLevel(x.id));
+    let pool = fresh;
+    if (!pool.length) {
+      const low = Math.min(...list.map(x => this.herbLevel(x.id)));
+      pool = list.filter(x => this.herbLevel(x.id) === low);
+    }
+    const x = pool[Math.floor(Math.random() * pool.length)];
+    const level = this.herbLevel(x.id) + 1;
+    this.s.herbarium[x.id] = level;
+    this.s.stats.specimens++;
+    this.dirty();
+    const found = { x, level, isNew: level === 1 };
+    this.emit('specimen', found);
+    if (!quiet) this.emit('log', level === 1
+      ? `Nouvelle planche pour l’herbier : <strong>${x.name}</strong> <em>(${x.latin})</em>`
+      : `Herbier : un plus beau spécimen de ${x.name} (niveau ${level})`);
+    return found;
+  },
+  glowUnlocked() { return herbSpecies(this.s) > 0; },
+  collectGlow() {
+    this.lastActive = Date.now();
+    this.s.stats.glows++;
+    const found = this.findSpecimen(true);
+    if (!found) this.emit('log', 'Une lueur dans la litière… ton herbier n’a plus rien à y apprendre pour l’instant.');
+    return found;
   },
 
   // ---------- Journal du réseau ----------
@@ -545,6 +620,19 @@ const Game = {
       if (this.s.nextRival <= 0) {
         this.s.nextRival = rand(...RIVAL_INTERVAL);
         this.startRival();
+      }
+    }
+    // Herbier (V9) : la prospection attend à 100 % s'il n'y a rien de nouveau à trouver cette saison
+    this.s.prospect = Math.min(1, this.s.prospect + this.prospectRate() * dt);
+    if (this.s.prospect >= 1 && this.findableSpecimens().length) {
+      this.s.prospect = 0;
+      this.findSpecimen();
+    }
+    if (this.glowUnlocked()) {
+      this.s.nextGlow -= dt;
+      if (this.s.nextGlow <= 0) {
+        this.s.nextGlow = rand(...GLOW_INTERVAL);
+        this.emit('glow');
       }
     }
     this._autoClock = (this._autoClock || 0) + dt;
@@ -660,6 +748,9 @@ const Game = {
       amberSpent: Number(data.amberSpent) || 0,
       relics: pick({}, data.relics),
       cycleSeasons: Number(data.cycleSeasons) || 0,
+      herbarium: cleanHerbarium(data.herbarium),
+      prospect: Math.min(1, Math.max(0, Number(data.prospect) || 0)),
+      nextGlow: Number(data.nextGlow) > 0 ? Math.min(GLOW_INTERVAL[1], Number(data.nextGlow)) : base.nextGlow,
       rival: data.rival && typeof data.rival === 'object' && data.rival.hp > 0 && data.rival.left > 0
         ? { hp: Number(data.rival.hp), max: Number(data.rival.max) || RIVAL_HP, left: Number(data.rival.left), seed: Number(data.rival.seed) >>> 0 }
         : null,
@@ -711,9 +802,19 @@ const Game = {
     if (gain > 0) this.earn(gain);
     const sugar = this.sugarRate() * elapsed * this.offlineRate();
     if (sugar > 0) { this.s.sugar += sugar; this.s.stats.sugarEarned += sugar; }
+    // Herbier : la prospection continue pendant l'absence (espèces de la saison en cours)
+    const found = [];
+    let p = this.s.prospect + this.prospectRate() * elapsed * this.offlineRate();
+    while (p >= 1 && found.length < 60) {
+      const f = this.findSpecimen(false, true);
+      if (!f) break;
+      found.push(f);
+      p -= 1;
+    }
+    this.s.prospect = Math.min(1, p);
     this.s.buffs = this.s.buffs.filter(b => b.left - elapsed > 0).map(b => ({ ...b, left: b.left - elapsed }));
     if (this.s.rival && elapsed > 5) { this.s.rival = null; this.dirty(); }  // elle repart pendant ton absence
-    return { elapsed, gain, sugar };
+    return { elapsed, gain, sugar, found };
   },
   exportSave() {
     this.s.lastSave = Date.now();

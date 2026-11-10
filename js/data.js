@@ -144,6 +144,12 @@ const ACHIEVEMENTS = [
   { id: 'a_fossil1', name: 'Pris dans l’ambre', desc: 'Obtenir un premier ambre.', check: s => s.amber >= 1 },
   { id: 'a_amber10', name: 'Collection d’ambre', desc: 'Posséder 10 ambres.', check: s => s.amber >= 10 },
   { id: 'a_relicAll', name: 'Musée d’histoire naturelle', desc: 'Toutes les reliques.', check: s => RELICS.every(r => s.relics && s.relics[r.id]) },
+  // V9 : herbier
+  { id: 'a_herb1', name: 'Première planche', desc: 'Trouver un premier spécimen.', check: s => herbSpecies(s) >= 1 },
+  { id: 'a_herb6', name: 'Herbier de poche', desc: 'Trouver 6 espèces.', check: s => herbSpecies(s) >= 6 },
+  { id: 'a_herbAll', name: 'Flore complète', desc: 'Trouver les 12 espèces.', check: s => herbSpecies(s) >= SPECIMENS.length },
+  { id: 'a_herbSeason', name: 'Une saison sous la loupe', desc: 'Les 3 espèces d’une même saison.', check: s => SEASONS.some(se => SPECIMENS.filter(x => x.season === se.id).every(x => s.herbarium && s.herbarium[x.id] > 0)) },
+  { id: 'a_herbMax', name: 'Spécimen de référence', desc: 'Une espèce au niveau 5.', check: s => SPECIMENS.some(x => s.herbarium && s.herbarium[x.id] >= HERB_MAX_LEVEL) },
 ];
 
 // Prestige (v6 : racine 4ᵉ au lieu de la racine carrée, sinon les spores s'emballent en fin de partie)
@@ -304,4 +310,57 @@ const RELICS = [
     desc: 'Colonies rivales 2× moins résistantes, carpophores 2× plus nombreux.' },
   { id: 'planet', icon: '🪐', cost: 8, name: 'Conscience planétaire',
     desc: 'Toute la production ×3.' },
+  // V9
+  { id: 'loupe', icon: '🔍', cost: 4, name: 'Loupe de naturaliste',
+    desc: 'Prospection de l’herbier 2× plus rapide.' },
 ];
+
+// ---------- V9 : herbier ----------
+// Le réseau prospecte tout seul (même hors ligne) et trouve des spécimens de la saison en cours.
+// Chaque niveau d'espèce : +3 % de production, plus l'effet propre à l'espèce. Rien n'est remis à zéro.
+const HERB_MAX_LEVEL = 5;
+const HERB_PROD = 0.03;          // +3 % de production par niveau d'espèce
+const PROSPECT_TIME = 420;       // secondes pour une trouvaille au tout début (plus rapide ensuite)
+const GLOW_INTERVAL = [180, 360];// lueur dans la litière (dès le 1er spécimen)
+const GLOW_STAY = 12;
+// gens : +x par niveau sur ces générateurs · kind/per : effet spécial (+per par niveau)
+// shape : dessin de la planche · req : générateur à posséder pour trouver l'espèce
+const SPECIMENS = [
+  { id: 'morille', season: 'printemps', name: 'Morille', latin: 'Morchella esculenta', shape: 'morel', cap: '#b48d5c', stem: '#efe3c8',
+    note: 'Chapeau alvéolé comme un rayon de miel. Sort après les premières pluies tièdes.',
+    gens: { hyphe: 0.2, rhizo: 0.2 }, effect: 'Hyphes et rhizomorphes +20 %', req: null },
+  { id: 'pezize', season: 'printemps', name: 'Pézize orangée', latin: 'Aleuria aurantia', shape: 'cup', cap: '#e8813a', stem: null,
+    note: 'Une coupe orange vif posée sur la terre nue, qui recueille la rosée.',
+    kind: 'drop', per: 0.1, effect: 'Gouttes de pluie +10 % plus fréquentes', req: 'litiere' },
+  { id: 'saintgeorges', season: 'printemps', name: 'Tricholome de la Saint-Georges', latin: 'Calocybe gambosa', shape: 'convex', cap: '#ece0c4', stem: '#f3ead6',
+    note: 'Pousse en ronds de sorcière à la lisière, vers la fin avril.',
+    gens: { myco: 0.2 }, effect: 'Mycorhizes +20 %', req: 'myco' },
+  { id: 'girolle', season: 'ete', name: 'Girolle', latin: 'Cantharellus cibarius', shape: 'funnel', cap: '#e9b44c', stem: '#e9b44c',
+    note: 'Plis jaune d’œuf sous le chapeau. Toujours fidèle à son arbre.',
+    kind: 'sugar', per: 0.1, effect: 'Sucre +10 %', req: 'myco' },
+  { id: 'cepe', season: 'ete', name: 'Cèpe de Bordeaux', latin: 'Boletus edulis', shape: 'bolete', cap: '#80512e', stem: '#e6d6b0',
+    note: 'Pied ventru, pores blancs. Les termites en connaissent tous les coins.',
+    gens: { termites: 0.2 }, effect: 'Termitières +20 %', req: 'termites' },
+  { id: 'cesar', season: 'ete', name: 'Amanite des Césars', latin: 'Amanita caesarea', shape: 'convex', cap: '#e2672e', stem: '#f0d36a',
+    note: 'Sort d’un œuf blanc, rouge orangé et lisse. Les sangliers en raffolent.',
+    kind: 'boar', per: 0.15, effect: 'Sanglier truffier +15 % de gains', req: 'wwweb' },
+  { id: 'coprin', season: 'automne', name: 'Coprin chevelu', latin: 'Coprinus comatus', shape: 'shaggy', cap: '#efe9dc', stem: '#f5f0e6',
+    note: 'Haut chapeau écailleux qui se dissout en encre noire en une nuit.',
+    gens: { litiere: 0.2 }, effect: 'Champignons de litière +20 %', req: 'litiere' },
+  { id: 'trompette', season: 'automne', name: 'Trompette de la mort', latin: 'Craterellus cornucopioides', shape: 'funnel', cap: '#6a5c52', stem: '#5a4d44',
+    note: 'Un cornet gris-noir, presque invisible dans les feuilles mortes.',
+    kind: 'click', per: 0.1, effect: 'Clic +10 %', req: 'rhizo' },
+  { id: 'clathre', season: 'automne', name: 'Clathre rouge', latin: 'Clathrus ruber', shape: 'cage', cap: '#d9452e', stem: null,
+    note: 'Une cage de corail rouge qui sent la charogne pour attirer les mouches.',
+    kind: 'flush', per: 0.2, effect: 'Carpophores +20 % de gains', req: 'termites' },
+  { id: 'mycene', season: 'hiver', name: 'Mycène lumineuse', latin: 'Mycena chlorophos', shape: 'bell', cap: '#c8eca8', stem: '#dff3cf', glow: true,
+    note: 'Minuscule, elle luit vert pâle sur le bois mort les nuits humides.',
+    gens: { lumi: 0.2 }, effect: 'Bois lumineux +20 %', req: 'lumi' },
+  { id: 'piedbleu', season: 'hiver', name: 'Pied bleu', latin: 'Lepista nuda', shape: 'convex', cap: '#8f84b8', stem: '#a89ccc',
+    note: 'Lilas, il pousse tard, jusque sous les premières gelées.',
+    gens: { continent: 0.2 }, effect: 'Mycélium continental +20 %', req: 'continent' },
+  { id: 'polypore', season: 'hiver', name: 'Polypore du bouleau', latin: 'Fomitopsis betulina', shape: 'bracket', cap: '#d8cbb0', stem: null,
+    note: 'Une console de cuir clair sur les bouleaux morts. Dure tout l’hiver.',
+    gens: { lichen: 0.15, abysses: 0.15, gaia: 0.15 }, effect: 'Lichen, mycélium abyssal et noosphère +15 %', req: 'lichen' },
+];
+function herbSpecies(s) { return SPECIMENS.filter(x => s.herbarium && s.herbarium[x.id] > 0).length; }

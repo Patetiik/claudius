@@ -444,3 +444,51 @@ button.water { border-color: rgba(143, 211, 255, .5); color: #a9dcff; padding: 4
   body { display: flex; flex-direction: column; }
   .layout { flex: 1; height: auto; min-height: 0; }
 }
+
+/* ---------- v9 : herbier ---------- */
+:root { --herb: #b9d79a; }
+.herb-dot { background: var(--herb); box-shadow: 0 0 6px rgba(185, 215, 154, .6); }
+.herb-line { font-size: 12px; }
+.herb-line strong { font-size: 13px; }
+.mini-bar { display: inline-block; width: 46px; height: 2px; background: var(--rule); margin-left: 4px; overflow: hidden; vertical-align: middle; }
+.mini-bar i { display: block; height: 100%; width: 0; background: var(--herb); transition: width .3s linear; }
+.herb-card { background: linear-gradient(180deg, rgba(185, 215, 154, .07), transparent); }
+#prospect-bar { height: 100%; width: 0; background: var(--herb); transition: width .3s linear; }
+.herb-season { margin-top: 18px; }
+.herb-season-head { font: italic 14px var(--serif); color: var(--ink2); margin-bottom: 8px; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+.herb-season-head span { font-style: normal; font-variant: small-caps; letter-spacing: .08em; color: var(--muted); }
+.herb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.specimen { display: flex; gap: 10px; padding: 9px 10px; border: 1px solid var(--rule); background: var(--panel); border-radius: 2px; }
+.specimen .plate { flex: none; width: 64px; height: 64px; background: rgba(0, 0, 0, .18); border: 1px solid var(--rule); }
+.specimen .plate svg { width: 100%; height: 100%; display: block; }
+.specimen .sp-text { min-width: 0; }
+.specimen .name { font: 600 14px/1.2 var(--serif); }
+.specimen .latin { font: italic 12px var(--serif); color: var(--ink2); }
+.specimen .desc { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.specimen .unlock { font-size: 11px; color: var(--accent2); margin-top: 3px; font-style: italic; }
+.specimen .levels { display: flex; gap: 3px; margin-top: 4px; }
+.specimen .levels i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--herb); }
+.specimen .levels i.on { background: var(--herb); }
+.specimen.found { border-color: rgba(185, 215, 154, .3); }
+.specimen.max { box-shadow: inset 2px 0 0 var(--herb); }
+.specimen.teased { opacity: .55; border-style: dashed; background: transparent; }
+.specimen.teased .name, .specimen.teased .latin { color: var(--muted); }
+.herb-foot { margin-top: 14px; font-style: italic; font-family: var(--serif); }
+/* Lueur dans la litière : tache de lumière vert pâle sous la surface, cible de 44 px */
+.glow-spot {
+  position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; pointer-events: auto; cursor: pointer; z-index: 2;
+  touch-action: manipulation; animation: fadeIn 1s ease-out both;
+}
+.glow-spot i {
+  position: absolute; inset: 8px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(226, 248, 200, .95), rgba(185, 225, 150, .45) 45%, rgba(185, 225, 150, 0));
+  animation: glowPulse 1.8s ease-in-out infinite; pointer-events: none;
+}
+.glow-spot:hover i { inset: 4px; }
+.glow-spot.picked { pointer-events: none; transition: opacity .3s, transform .3s; opacity: 0; transform: scale(1.6); }
+.glow-spot.wilt { transition: opacity 2s; opacity: 0; }
+@keyframes glowPulse { 0%, 100% { transform: scale(.8); opacity: .6; } 50% { transform: scale(1.1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .glow-spot i { animation: none; } }
+@media (max-width: 420px) {
+  .herb-grid { grid-template-columns: 1fr; }
+}

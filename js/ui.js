@@ -127,6 +127,25 @@ const UI = {
       this.relicNodes[r.id] = { d, cost: d.querySelector('.cost') };
     });
 
+    // Herbier (V9) : une planche par espèce, regroupées par saison
+    this.herbNodes = {};
+    this.herbNew = 0;
+    SEASONS.forEach((se, i) => {
+      const sec = el('div', 'herb-season', `<div class="herb-season-head"><span>Pl. ${['II', 'III', 'IV', 'V'][i]}</span> — ${se.name.replace(/^\S+\s+/, '')}</div>`);
+      const grid = el('div', 'herb-grid');
+      SPECIMENS.filter(x => x.season === se.id).forEach(x => {
+        const d = el('div', 'specimen', `<div class="plate"></div><div class="sp-text">
+          <div class="name"></div><div class="latin">${x.latin}</div><div class="levels"></div>
+          <div class="desc"></div><div class="unlock"></div></div>`);
+        grid.appendChild(d);
+        this.herbNodes[x.id] = { d, key: '', plate: d.querySelector('.plate'), name: d.querySelector('.name'),
+          levels: d.querySelector('.levels'), desc: d.querySelector('.desc'), unlock: d.querySelector('.unlock') };
+      });
+      sec.appendChild(grid);
+      $('herb-list').appendChild(sec);
+    });
+    document.querySelector('.tabs button[data-tab="herbier"]').addEventListener('click', () => { this.herbNew = 0; });
+
     // Export / import
     const msg = (t, bad) => { $('save-msg').textContent = t; $('save-msg').style.color = bad ? 'var(--bad)' : 'var(--accent2)'; };
     $('btn-export').addEventListener('click', async () => {
@@ -229,6 +248,30 @@ const UI = {
     });
     wrap.appendChild(b);
     setTimeout(() => b.remove(), BOAR_STAY * 1000);
+  },
+
+  // Lueur dans la litière (V9) : un spécimen rare luit sous la surface. Le rater ne coûte rien.
+  spawnGlow() {
+    const wrap = $('floaters');
+    const g = el('div', 'glow-spot', '<i></i>');
+    g.style.left = rand(10, 88) + '%';
+    g.style.top = rand(32, 82) + '%';
+    g.title = 'Une lueur dans la litière : un spécimen pour ton herbier';
+    g.setAttribute('role', 'button');
+    g.setAttribute('aria-label', 'Ramasser le spécimen lumineux');
+    g.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (g.classList.contains('picked')) return;
+      const found = Game.collectGlow();
+      const r = wrap.getBoundingClientRect();
+      if (found) this.floater(e.clientX - r.left, e.clientY - r.top, found.x.name);
+      g.classList.add('picked');
+      setTimeout(() => g.remove(), 300);
+      this.update();
+    });
+    wrap.appendChild(g);
+    setTimeout(() => g.classList.add('wilt'), (GLOW_STAY - 2) * 1000);
+    setTimeout(() => g.remove(), GLOW_STAY * 1000);
   },
 
   // Poussée de carpophores (V6, redessinée en V7) : grands champignons ivoire et lumineux,
@@ -404,7 +447,45 @@ const UI = {
     this.updateAchievements();
     this.updatePrestige();
     this.updateAmber();
+    this.updateHerbarium();
     this.updateStats();
+  },
+
+  updateHerbarium() {
+    const s = Game.s;
+    const nSp = herbSpecies(s);
+    const pct = Math.floor(s.prospect * 100);
+    const findable = Game.findableSpecimens().length > 0;
+    $('herb-box').classList.toggle('hidden', nSp === 0 && s.stats.playTime < 30);
+    $('prospect-pct').textContent = pct;
+    $('prospect-mini').style.width = pct + '%';
+    $('herb-badge').classList.toggle('hidden', !this.herbNew);
+    $('herb-badge').textContent = this.herbNew;
+    if (!$('tab-herbier').classList.contains('active')) return;
+    $('herb-summary').innerHTML = `<strong>${nSp}</strong> / ${SPECIMENS.length} espèces · ${Game.herbLevels()} / ${SPECIMENS.length * HERB_MAX_LEVEL} niveaux · production <strong>×${fmt(Game.herbMult(), 2)}</strong>`;
+    $('prospect-bar').style.width = pct + '%';
+    const rate = Game.prospectRate();
+    const season = Game.season().name.replace(/^\S+\s+/, '').toLowerCase();
+    $('prospect-info').textContent = findable
+      ? `Prospection : ${pct} % · prochaine trouvaille dans ${fmtTime(Math.max(0, (1 - s.prospect) / rate))} environ (une toutes les ${fmtTime(1 / rate)}).`
+      : `Prospection : ${pct} % · rien de nouveau à trouver en ${season} pour l’instant : la trouvaille attend la saison suivante ou un nouveau générateur.`;
+    for (const x of SPECIMENS) {
+      const n = this.herbNodes[x.id];
+      const lvl = Game.herbLevel(x.id), reqOk = Game.specimenReqMet(x);
+      const key = lvl + '|' + reqOk;
+      if (key === n.key) continue;
+      n.key = key;
+      n.d.className = 'specimen' + (lvl ? ' found' : ' teased') + (lvl >= HERB_MAX_LEVEL ? ' max' : '');
+      n.plate.innerHTML = specimenSVG(x, lvl > 0);
+      n.name.textContent = x.name;
+      n.levels.innerHTML = lvl ? Array.from({ length: HERB_MAX_LEVEL }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('') : '';
+      const cur = lvl ? ` (actuel +${fmt((x.gens ? Object.values(x.gens)[0] : x.per) * lvl * 100)} %)` : '';
+      n.desc.textContent = lvl ? `${x.note} ${x.effect} par niveau${cur}.` : `${x.effect} par niveau.`;
+      const seasonName = SEASONS.find(se => se.id === x.season).name.replace(/^\S+\s+/, '').toLowerCase();
+      const gen = x.req && GENERATORS.find(g => g.id === x.req);
+      n.unlock.textContent = lvl ? (lvl >= HERB_MAX_LEVEL ? 'Spécimen de référence' : `Niveau ${lvl} / ${HERB_MAX_LEVEL} · se trouve en ${seasonName}`)
+        : `Se trouve en ${seasonName}` + (reqOk ? '' : ` · requiert : ${gen.name}`);
+    }
   },
 
   updateUpgrades() {
@@ -562,6 +643,9 @@ const UI = {
       ['Sécheresses traversées', fmt(st.droughts)],
       ['Colonies rivales repoussées', fmt(st.rivals)],
       ['Carpophores cueillis', fmt(st.flushPicked)],
+      ['Herbier', `${herbSpecies(Game.s)} / ${SPECIMENS.length} espèces (×${fmt(Game.herbMult(), 2)})`],
+      ['Spécimens trouvés', fmt(st.specimens)],
+      ['Lueurs ramassées', fmt(st.glows)],
       ['Ambre', `${fmt(Game.s.amber)} (×${fmt(Game.amberMult(), 2)})`],
       ['Reliques', `${Object.keys(Game.s.relics).length} / ${RELICS.length}`],
       ['Jalons', `${Game.achCount()} / ${ACHIEVEMENTS.length} (+${Game.achCount() * 2} %)`],
@@ -571,3 +655,71 @@ const UI = {
     $('stats').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
   },
 };
+
+// Planche d'herbier (V9) : un dessin à la plume par forme de champignon.
+// found = false : silhouette grisée, pour l'aperçu des espèces pas encore trouvées.
+function specimenSVG(x, found) {
+  const cap = found ? x.cap : 'rgba(236,226,207,.10)';
+  const stem = found ? (x.stem || x.cap) : 'rgba(236,226,207,.07)';
+  const line = found ? 'rgba(20,14,9,.55)' : 'rgba(236,226,207,.28)';
+  const dash = found ? '' : ' stroke-dasharray="2 2"';
+  const st = `stroke="${line}" stroke-width="1"${dash}`;
+  const hi = found ? 'rgba(255,250,235,.35)' : 'none';
+  const ink = found ? 'rgba(20,14,9,.4)' : 'rgba(236,226,207,.18)';
+  let body = '';
+  switch (x.shape) {
+    case 'convex':
+      body = `<path d="M36 70 Q35 56 37 43 L43 43 Q45 56 44 70 Z" fill="${stem}" ${st}/>
+        <path d="M14 45 Q14 18 40 17 Q66 18 66 45 Q40 49 14 45 Z" fill="${cap}" ${st}/>
+        <path d="M24 26 Q32 20 42 21" stroke="${hi}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M20 46 L60 46" stroke="${ink}" stroke-width="1"/>`;
+      break;
+    case 'bolete':
+      body = `<path d="M31 70 Q24 57 34 44 L46 44 Q56 57 49 70 Z" fill="${stem}" ${st}/>
+        <path d="M11 46 Q11 15 40 14 Q69 15 69 46 Q40 51 11 46 Z" fill="${cap}" ${st}/>
+        <path d="M22 25 Q31 18 43 18" stroke="${hi}" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M36 52 L37 64 M42 52 L43 66" stroke="${ink}" stroke-width=".7"/>`;
+      break;
+    case 'funnel':
+      body = `<path d="M37 70 L43 70 L48 42 Q60 32 64 25 Q40 33 16 25 Q20 32 32 42 Z" fill="${stem}" ${st}/>
+        <ellipse cx="40" cy="25.5" rx="24" ry="4.5" fill="${cap}" ${st}/>
+        <path d="M34 40 L38 62 M40 38 L40 64 M46 40 L42 62" stroke="${ink}" stroke-width=".7"/>`;
+      break;
+    case 'morel':
+      body = `<path d="M34 70 L46 70 L45 50 L35 50 Z" fill="${stem}" ${st}/>
+        <path d="M30 52 Q23 30 40 9 Q57 30 50 52 Q40 55 30 52 Z" fill="${cap}" ${st}/>
+        <path d="M33 22 Q40 26 47 22 M29 33 Q40 38 51 33 M29 44 Q40 48 51 44 M36 14 L33 52 M44 14 L47 52 M40 9 L40 54" stroke="${ink}" stroke-width="1" fill="none"/>`;
+      break;
+    case 'cup':
+      body = `<path d="M16 50 Q19 70 40 70 Q61 70 64 50 Q40 57 16 50 Z" fill="${cap}" ${st}/>
+        <ellipse cx="40" cy="50" rx="24" ry="5.5" fill="${found ? 'rgba(255,220,170,.35)' : 'none'}" ${st}/>`;
+      break;
+    case 'shaggy':
+      body = `<path d="M38 70 L42 70 L41.5 30 L38.5 30 Z" fill="${stem}" ${st}/>
+        <path d="M28 52 Q25 14 40 7 Q55 14 52 52 Q40 55 28 52 Z" fill="${cap}" ${st}/>
+        <path d="M34 18 l2 3 M44 16 l-2 3 M32 28 l2 3 M40 25 l0 3 M48 28 l-2 3 M31 39 l2 3 M39 36 l1 3 M47 40 l-2 3" stroke="${ink}" stroke-width="1.2" stroke-linecap="round"/>
+        <path d="M29 51 Q40 56 51 51" stroke="${found ? 'rgba(30,24,20,.8)' : ink}" stroke-width="2.5" fill="none"/>`;
+      break;
+    case 'bell':
+      body = (found && x.glow ? `<circle cx="40" cy="38" r="26" fill="url(#glow-${x.id})"/>` : '')
+        + `<path d="M39.3 70 L40.7 70 L40.5 40 L39.5 40 Z" fill="${stem}" ${st}/>
+        <path d="M29 42 Q31 25 40 23 Q49 25 51 42 Q40 45 29 42 Z" fill="${cap}" ${st}/>
+        <path d="M34 41 L37 28 M40 43 L40 25 M46 41 L43 28" stroke="${ink}" stroke-width=".6"/>
+        <path d="M22 70 L24 66 L27 70 M52 70 L55 67 L57 70" stroke="${found ? stem : 'none'}" stroke-width="1" fill="none"/>`;
+      break;
+    case 'cage':
+      body = `<ellipse cx="40" cy="44" rx="21" ry="24" fill="none" stroke="${cap}" stroke-width="3.5"${dash}/>
+        <path d="M22 34 Q40 44 58 34 M20 50 Q40 58 60 50 M30 22 Q36 44 30 66 M50 22 Q44 44 50 66 M40 20 L40 68" stroke="${cap}" stroke-width="3" fill="none"${dash}/>
+        <ellipse cx="40" cy="69" rx="10" ry="2.5" fill="${found ? '#ece2cf' : 'none'}" ${st}/>`;
+      break;
+    case 'bracket':
+      body = `<path d="M58 6 L72 6 L72 74 L58 74 Z" fill="${found ? '#3b3027' : 'none'}" ${st}/>
+        <path d="M62 14 l6 0 M61 30 l8 0 M62 66 l5 0" stroke="${found ? 'rgba(236,226,207,.35)' : ink}" stroke-width="1"/>
+        <path d="M58 30 Q30 26 20 38 Q36 46 58 43 Z" fill="${cap}" ${st}/>
+        <path d="M58 52 Q40 50 32 58 Q44 63 58 61 Z" fill="${cap}" ${st}/>
+        <path d="M26 37 Q40 38 56 35 M36 57 Q46 58 56 56" stroke="${ink}" stroke-width=".8" fill="none"/>`;
+      break;
+  }
+  const defs = x.glow ? `<defs><radialGradient id="glow-${x.id}"><stop offset="0" stop-color="#c8eca8" stop-opacity=".55"/><stop offset="1" stop-color="#c8eca8" stop-opacity="0"/></radialGradient></defs>` : '';
+  return `<svg viewBox="0 0 80 80" aria-hidden="true">${defs}<path d="M6 70.5 L74 70.5" stroke="rgba(236,226,207,.25)" stroke-width="1"/>${body}</svg>`;
+}

@@ -1,7 +1,7 @@
 // Claudius — service worker : le jeu reste jouable hors connexion, sans jamais servir une ancienne version.
 // Stratégie « réseau d'abord » : en ligne, on prend toujours les fichiers du serveur (et on en garde une copie) ;
 // hors ligne ou réseau trop lent, on sert la dernière copie. Les sauvegardes (localStorage) ne passent pas par ici.
-const VERSION = '8.0';   // changé par nouvelle-version.sh, comme les ?v= de index.html
+const VERSION = '9.0';   // changé par nouvelle-version.sh, comme les ?v= de index.html
 const CACHE = 'claudius-' + VERSION;
 const FILES = [
   './', 'css/style.css',

@@ -5,6 +5,8 @@
     UI.modal(`<h2>Bon retour</h2><p>Pendant ${fmtTime(offline.elapsed)}, Claudius a digéré en silence :</p>
       <p style="font-size:24px;color:var(--accent)"><strong>+${fmt(offline.gain)}</strong> nutriments</p>
       ${offline.sugar > 0 ? `<p>et <strong>+${fmt(offline.sugar)}</strong> sucre</p>` : ''}
+      ${offline.found && offline.found.length ? `<p>Ton réseau a aussi rapporté ${offline.found.length > 1 ? offline.found.length + ' spécimens' : 'un spécimen'} pour l’herbier :
+        ${[...new Set(offline.found.map(f => f.x.name))].join(', ')}.</p>` : ''}
       <p class="muted small">(${Game.offlineRate() * 100} % de la production, ${Game.offlineCap() / 3600} h max)</p>`);
   }
   const canvas = $('network');
@@ -12,6 +14,7 @@
   UI.init();
 
   const offline = Game.load();
+  if (offline && offline.found) UI.herbNew = offline.found.length;
   Network.rebuild(Game.s);
   if (Game.s.rival) Network.startRival(Game.s.rival);
   if (Game.s.stats.clicks > 0) $('hint').style.opacity = 0;
@@ -114,6 +117,10 @@
   Game.on('rival', () => Network.startRival(Game.s.rival));
   Game.on('rivalEnd', ({ won }) => { Network.endRival(won); UI.update(); });
   Game.on('flush', n => UI.spawnFlush(n));
+  Game.on('glow', () => UI.spawnGlow());
+  Game.on('specimen', () => {
+    if (!$('tab-herbier').classList.contains('active')) UI.herbNew++;
+  });
   Game.on('challengeDone', c => {
     UI.log(`🏆 Défi réussi : <strong>${c.name}</strong>`);
     UI.modal(`<h2>Défi réussi</h2><p><strong>${c.name}</strong></p>
@@ -132,7 +139,7 @@
     // En dessous de 2 min (onglet en arrière-plan ralenti), on rattrape normalement.
     if (dt > AWAY_THRESHOLD) {
       const away = Game.applyAway(dt);
-      if (away.gain > 0) welcomeBack(away);
+      if (away.gain > 0 || away.found.length) welcomeBack(away);
       Game.tick(0.1);
       Game.save();
     } else Game.tick(dt);
