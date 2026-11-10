@@ -634,6 +634,12 @@ I18N.en = {
     },
     // v10 : notes de version en anglais (le français est dans js/changelog.js), par numéro de version
     changelog: {
+      '11.1': { title: 'Trial fix',
+        summary: 'The “Toothless” trial can finally be completed.',
+        fixed: [
+          'The “Toothless” trial was impossible: with no clicks, its empty plate could never buy its first hypha. It now starts with 10 free hyphae.',
+        ],
+      },
       '11.0': { title: 'Continuous sporulation',
         summary: 'No more resets: your network stays, and your spores release themselves. You keep every one you had.',
         added: [

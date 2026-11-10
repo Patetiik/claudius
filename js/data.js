@@ -243,6 +243,7 @@ const SPECIES = [
 // mais ce qu'elle produit ne compte pas pour les spores.
 const PLATE_GENS = ['hyphe', 'rhizo', 'litiere', 'myco', 'termites', 'wwweb', 'lumi', 'continent'];
 const PLATE_CLICK_PCT = 0.05;   // toucher une planche : 1 + 5 % de sa production
+const PLATE_NOCLICK_START = 10;  // hyphes offertes sur la planche « Sans dents » (sinon impossible à démarrer)
 const TRIAL_UNLOCK = 5;         // spores pour débloquer les planches d'épreuve
 const CHALLENGES = [
   { id: 'noclick', icon: '🤐', goal: 1e6, rule: { noClick: true } },

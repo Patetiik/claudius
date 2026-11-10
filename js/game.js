@@ -226,7 +226,10 @@ const Game = {
   startTrial(id) {
     const def = this.plateDef(id);
     if (!def || !this.challengesUnlocked() || this.trial() || this.chalDone(id)) return false;
-    this.s.plates[id] = { nutrients: 0, earned: 0, gens: {}, netSeed: (Math.random() * 4294967296) >>> 0, netLog: '' };
+    // Sans clic, une planche vide ne peut jamais acheter sa 1ʳᵉ hyphe : on lui en offre quelques-unes (v11.1)
+    const start = def.rule.noClick ? { hyphe: PLATE_NOCLICK_START } : {};
+    this.s.plates[id] = { nutrients: 0, earned: 0, gens: { ...start }, netSeed: (Math.random() * 4294967296) >>> 0,
+      netLog: 'a'.repeat(start.hyphe || 0) };
     this.emit('trialStart', def);
     this.emit('log', t('log.trialStart', { name: def.name }));
     return true;

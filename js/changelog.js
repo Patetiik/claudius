@@ -4,6 +4,13 @@
 // (pas de jargon technique), et la traduire dans le fichier de traduction si besoin.
 const CHANGELOG = [
   {
+    version: '11.1', date: '2026-11-11', title: 'Correctif des épreuves',
+    summary: 'L’épreuve « Sans dents » peut enfin être réussie.',
+    fixed: [
+      'L’épreuve « Sans dents » était impossible : sans clic, sa planche vide ne pouvait jamais acheter sa première hyphe. Elle démarre désormais avec 10 hyphes offertes.',
+    ],
+  },
+  {
     version: '11.0', date: '2026-11-10', title: 'Sporulation continue',
     summary: 'Plus aucune remise à zéro : ton réseau reste, et tes spores se libèrent toutes seules. Tu gardes toutes celles que tu avais.',
     added: [
