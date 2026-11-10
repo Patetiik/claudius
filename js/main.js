@@ -1,13 +1,31 @@
 // Point d'entrée : boucles, événements, sauvegarde auto
 (function () {
   const AWAY_THRESHOLD = 120;  // secondes sans tick au-delà desquelles on compte une absence
-  function welcomeBack(offline) {
-    UI.modal(`<h2>Bon retour</h2><p>Pendant ${fmtTime(offline.elapsed)}, Claudius a digéré en silence :</p>
-      <p style="font-size:24px;color:var(--accent)"><strong>+${fmt(offline.gain)}</strong> nutriments</p>
-      ${offline.sugar > 0 ? `<p>et <strong>+${fmt(offline.sugar)}</strong> sucre</p>` : ''}
-      ${offline.found && offline.found.length ? `<p>Ton réseau a aussi rapporté ${offline.found.length > 1 ? offline.found.length + ' spécimens' : 'un spécimen'} pour l’herbier :
-        ${[...new Set(offline.found.map(f => f.x.name))].join(', ')}.</p>` : ''}
-      <p class="muted small">(${Game.offlineRate() * 100} % de la production, ${Game.offlineCap() / 3600} h max)</p>`);
+  // Fenêtre « Bon retour » détaillée (v10) : ce qui a été produit et rapporté pendant l'absence
+  function welcomeBack(o) {
+    const r = Math.round(o.rate * 100);
+    const row = (label, value, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td><td>${value}</td></tr>`;
+    const rows = [row(t('wb.nutrients'), '+' + fmt(o.gain), 'main')];
+    // les 4 générateurs qui ont le plus rapporté, puis le reste
+    const top = o.perGen.slice(0, 4);
+    for (const x of top) rows.push(row(t('wb.of', { gen: `${x.g.name} ×${x.n}` }), '+' + fmt(x.gain), 'sub'));
+    if (o.perGen.length > 4) rows.push(row('…', '+' + fmt(o.perGen.slice(4).reduce((a, x) => a + x.gain, 0)), 'sub'));
+    if (o.sugar > 0) rows.push(row(t('wb.sugar'), '+' + fmt(o.sugar, o.sugar < 10 ? 1 : 0), 'main'));
+    if (o.found.length || o.prospectTo !== o.prospectFrom) {
+      const a = Math.floor(o.prospectFrom * 100), b = Math.floor(o.prospectTo * 100);
+      rows.push(row(t('wb.prospect'), o.found.length ? t(o.found.length > 1 ? 'wb.finds' : 'wb.find1', { n: o.found.length }) : t('wb.prospectVal', { a, b }), 'main'));
+    }
+    // spécimens : un par espèce, avec le niveau atteint
+    const sp = new Map();
+    for (const f of o.found) sp.set(f.x.id, { x: f.x, level: f.level, isNew: (sp.get(f.x.id) || f).isNew || f.isNew });
+    const spec = [...sp.values()].map(v => `<li><strong>${v.x.name}</strong> <em>${v.x.latin}</em> · ${v.isNew ? t('wb.newSp') : t('wb.lvl', { l: v.level })}</li>`).join('');
+    UI.modal(`<h2>${t('wb.title')}</h2>
+      <p>${t('wb.away', { t: fmtTime(o.away) })}${o.away > o.elapsed + 1 ? t('wb.capped', { t: fmtTime(o.elapsed) }) : ''}</p>
+      <p class="small">${t('wb.rate', { r })}</p>
+      <table class="wb-table">${rows.join('')}</table>
+      ${spec ? `<div class="wb-specimens"><div class="small muted">${t('wb.specimens')}</div><ul>${spec}</ul></div>` : ''}
+      ${o.live > 0 ? `<p class="muted small">${t('wb.equiv', { t: fmtTime(o.gain / o.live) })}</p>` : ''}
+      <p class="muted small">${t('wb.foot', { r, h: Game.offlineCap() / 3600 })}</p>`);
   }
   const canvas = $('network');
   Network.init(canvas);
@@ -20,30 +38,34 @@
   if (Game.s.stats.clicks > 0) $('hint').style.opacity = 0;
 
   if (SANDBOX) {
-    document.title = `[Bac à sable ${SANDBOX}] ` + document.title;
-    const tag = el('div', 'sandbox-tag', `Bac à sable « ${SANDBOX} » : ta vraie partie n’est pas touchée`);
+    const tag = el('div', 'sandbox-tag');
+    tag.id = 'sandbox-tag';
+    tag.textContent = t('sandbox.tag', { name: SANDBOX });
     tag.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:20;padding:4px 10px;font-size:12px;background:#5a2a1e;color:#f3e3c8;border:1px solid var(--bad);border-radius:2px;pointer-events:none';
     document.body.appendChild(tag);
   }
 
+  // Accueil d'un nouveau joueur : un lien permet de passer tout de suite dans l'autre langue
+  function welcome() {
+    const other = isEn() ? 'fr' : 'en';
+    UI.modal(`<h2>${t('m.welcomeTitle')}</h2><p>${t('m.welcome')}</p>
+      <p class="muted small">${t('m.welcomeSmall')}</p>
+      <p><button type="button" class="ghost lang-switch" id="btn-lang" lang="${other}">${t('m.otherLang')}</button></p>`);
+    $('btn-lang').addEventListener('click', () => { UI.changeSetting('lang', other); welcome(); });
+  }
   if (offline && offline.fromBackup) {
-    UI.modal(`<h2>Partie récupérée</h2>
-      <p>${Game.loadIssue === 'corrupt' ? 'Ta sauvegarde était illisible (une copie brute est gardée de côté).' : 'Ta sauvegarde avait disparu.'}
-      Claudius a repris sa <strong>sauvegarde de secours</strong>.</p>
-      <p class="muted small">${fmt(Game.progressScore(Game.s))} nutriments gagnés au total.</p>`);
-  } else if (offline && offline.elapsed > 60 && offline.gain > 0) {
+    UI.modal(`<h2>${t('m.recoveredTitle')}</h2>
+      <p>${Game.loadIssue === 'corrupt' ? t('m.recoveredCorrupt') : t('m.recoveredMissing')}
+      ${t('m.recovered')}</p>
+      <p class="muted small">${t('m.recoveredScore', { n: fmt(Game.progressScore(Game.s)) })}</p>`);
+  } else if (offline && offline.elapsed > 60 && (offline.gain > 0 || offline.found.length)) {
     welcomeBack(offline);
   } else if (!offline) {
-    UI.modal(`<h2>Bienvenue, Claudius</h2>
-      <p>Tu es une spore qui vient de germer sous une forêt. Clique pour digérer la litière,
-      tisse des hyphes, pactise avec les arbres… et deviens le plus grand être vivant du monde.</p>
-      <p class="muted small">Les saisons changent toutes les 90 s et favorisent certaines parties du réseau.
-      Guette les 💧 gouttes de pluie !</p>`);
+    welcome();
   }
 
-  if (Game.storageOk && !Game.storageOk()) {
-    UI.log('⚠️ Ce navigateur ne garde pas la partie (navigation privée ou stockage bloqué). Exporte ton code depuis le Carnet avant de fermer.');
-  }
+  if (Game.storageOk && !Game.storageOk()) UI.log(t('log.noStorage'));
+  UI.initChangelog(!!offline);
 
   // Une seule partie active par navigateur : si le jeu s'ouvre dans un autre onglet, celui-ci se met en pause
   // et n'écrit plus rien (sinon les deux onglets sauvegarderaient l'un par-dessus l'autre).
@@ -51,10 +73,9 @@
     if (Game.readOnly) return;
     Game.readOnly = true;
     $('modal-ok').classList.add('hidden');
-    UI.modal(`<h2>Partie ouverte ailleurs</h2>
-      <p>Claudius pousse aussi dans un autre onglet ou une autre fenêtre de ce navigateur.
-      Pour ne pas mélanger les deux, cette page est mise en pause.</p>
-      <button id="btn-here" class="big">Jouer ici</button>`);
+    UI.modal(`<h2>${t('m.elsewhereTitle')}</h2>
+      <p>${t('m.elsewhere')}</p>
+      <button id="btn-here" class="big">${t('m.playHere')}</button>`);
     $('btn-here').addEventListener('click', () => location.reload());
   }
   try {
@@ -93,38 +114,41 @@
     }
   });
   Game.on('log', msg => UI.log(msg));
-  Game.on('achievement', a => UI.log(`🏅 Jalon : <strong>${a.name}</strong> (+2 % de production)`));
-  Game.on('season', s => UI.log(`${s.name} — ${s.hint}`));
-  Game.on('drop', () => UI.spawnDrop());
-  Game.on('boar', () => UI.spawnBoar());
+  Game.on('achievement', a => UI.log(t('log.achievement', { name: a.name })));
+  Game.on('season', s => UI.log(t('log.season', { name: s.name, hint: s.hint })));
+  // Notes de terrain déclenchées par un événement (v10) : la 1ʳᵉ goutte, le 1ᵉʳ sanglier…
+  const noteOn = id => UI.queueNote(Game.openNote(id), true);
+  Game.on('drop', () => { noteOn('drop'); UI.spawnDrop(); });  // la note d'abord : la goutte se pose au-dessus
+  Game.on('boar', () => { UI.spawnBoar(); noteOn('boar'); });
+  Game.on('drought', () => noteOn('drought'));
   Game.on('prestige', ({ gain, amberGain, challenge }) => {
     Network.rebuild(Game.s);
     UI.upgKey = null;
     const sp = Game.sp();
     UI.modal(challenge
-      ? `<h2>Défi : ${challenge.name}</h2>
-        ${gain >= 1 ? `<p>${gain} spore(s) s’envolent avant l’épreuve.</p>` : ''}
+      ? `<h2>${t('m.chalTitle', { name: challenge.name })}</h2>
+        ${gain >= 1 ? `<p>${t('m.chalSpores', { n: gain })}</p>` : ''}
         <p>⚖️ ${challenge.rule}</p>
-        <p>🎯 Atteins <strong>${fmt(challenge.goal)}</strong> nutriments sur ce cycle.</p>
+        <p>${t('m.chalGoal', { n: fmt(challenge.goal) })}</p>
         <p class="muted small">🏆 ${challenge.reward}</p>`
-      : `<h2>Sporulation</h2><p>${gain} spore(s) s’envolent et germent dans une forêt nouvelle.</p>
-        <p>${sp.icon} Tu renais en <strong>${sp.name}</strong>.</p>
-        <p>Production permanente : <strong>+${fmt(Game.s.spores * Game.sporeBonusPer() * 100)} %</strong></p>
-        ${amberGain ? `<p>Une partie se fige dans la résine : <strong>+${amberGain}</strong> ambre (production ×${fmt(Game.amberMult(), 2)}).</p>` : ''}
-        <p class="muted small">Dépense tes spores dans l’arbre de talents (onglet Sporulation).</p>`);
+      : `<h2>${t('m.sporeTitle')}</h2><p>${t('m.sporeGain', { n: gain })}</p>
+        <p>${t('m.reborn', { icon: sp.icon, name: sp.name })}</p>
+        <p>${t('m.permProd', { p: fmt(Game.s.spores * Game.sporeBonusPer() * 100) })}</p>
+        ${amberGain ? `<p>${t('m.amberGain', { n: amberGain, m: fmt(Game.amberMult(), 2) })}</p>` : ''}
+        <p class="muted small">${t('m.spendSpores')}</p>`);
     UI.update();
   });
-  Game.on('rival', () => Network.startRival(Game.s.rival));
+  Game.on('rival', () => { Network.startRival(Game.s.rival); noteOn('rival'); });
   Game.on('rivalEnd', ({ won }) => { Network.endRival(won); UI.update(); });
-  Game.on('flush', n => UI.spawnFlush(n));
-  Game.on('glow', () => UI.spawnGlow());
+  Game.on('flush', n => { UI.spawnFlush(n); noteOn('flush'); });
+  Game.on('glow', () => { noteOn('glow'); UI.spawnGlow(); });
   Game.on('specimen', () => {
     if (!$('tab-herbier').classList.contains('active')) UI.herbNew++;
   });
   Game.on('challengeDone', c => {
-    UI.log(`🏆 Défi réussi : <strong>${c.name}</strong>`);
-    UI.modal(`<h2>Défi réussi</h2><p><strong>${c.name}</strong></p>
-      <p>${c.reward}</p><p class="muted small">Ton cycle continue normalement.</p>`);
+    UI.log(t('log.chalDone', { name: c.name }));
+    UI.modal(`<h2>${t('m.chalDoneTitle')}</h2><p><strong>${c.name}</strong></p>
+      <p>${c.reward}</p><p class="muted small">${t('m.chalContinue')}</p>`);
     UI.update();
   });
 
@@ -140,6 +164,7 @@
     if (dt > AWAY_THRESHOLD) {
       const away = Game.applyAway(dt);
       if (away.gain > 0 || away.found.length) welcomeBack(away);
+      UI.herbNew += away.found.length;
       Game.tick(0.1);
       Game.save();
     } else Game.tick(dt);
@@ -147,7 +172,13 @@
 
   // Interface : 5 maj/s, jalons 1/s
   setInterval(() => UI.update(), 200);
-  setInterval(() => Game.checkAchievements(), 1000);
+  // Jalons et notes de terrain (v10) : 1 fois par seconde
+  setInterval(() => {
+    if (Game.readOnly) return;
+    Game.checkAchievements();
+    Game.checkNotes().forEach(n => UI.queueNote(n));
+    UI.pumpNotes();
+  }, 1000);
 
   // Rendu
   let lastFrame = performance.now();
@@ -180,10 +211,13 @@
     const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     if (navigator.storage && navigator.storage.persist && (installed || navigator.userAgentData)) navigator.storage.persist().catch(() => {});
   } catch (e) { /* rien */ }
-  $('btn-save').addEventListener('click', () => { Game.save() ? UI.log('💾 Partie sauvegardée') : UI.log('⚠️ Sauvegarde impossible (stockage bloqué)'); });
+  $('btn-save').addEventListener('click', () => { UI.log(Game.save() ? t('log.saved') : t('log.saveFailed')); });
   $('btn-reset').addEventListener('click', () => {
-    if (!confirm('Repartir de zéro ? (spores et jalons compris)\nTa partie la plus avancée reste restaurable depuis le Carnet.')) return;
+    if (!confirm(t('m.resetConfirm'))) return;
     Game.hardReset();
+    Game.pendingNotes.clear();
+    UI.noteQueue = [];
+    UI._guideShown = UI._guideEnd = null;
     Network.rebuild(Game.s);
     UI.upgKey = null;
     UI.achKey = null;
@@ -191,6 +225,8 @@
   });
 
   UI.emitImported = () => {
+    Game.pendingNotes.clear();
+    UI.noteQueue = [];
     Network.rebuild(Game.s);
     if (Game.s.rival) Network.startRival(Game.s.rival);
     UI.upgKey = null;

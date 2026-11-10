@@ -15,7 +15,7 @@ ou servir le dossier : `python3 -m http.server 8765 --bind 127.0.0.1`.
 - **Saisons** (90 s chacune) qui boostent ou freinent certains générateurs.
 - **Gouttes de pluie 💧** aléatoires : ondée (×3), flaque (gain instantané) ou orage (clic ×15).
 - **Évolutions** : ×2/×3 par générateur, clic en % de la prod, bonus globaux.
-- **Jalons** (46 en v9) : +2 % de production chacun.
+- **Jalons** (43) : +2 % de production chacun.
 - **Sporulation** (prestige, dès 1 M) : spores = (total du cycle / 1 M)^¼, +5 % chacune (racine carrée avant la v6).
 - Sauvegarde auto (localStorage, 10 s) + gains hors-ligne (50 %, 8 h max).
 
@@ -167,19 +167,62 @@ Une couche de collection cumulative, sans aucune remise à zéro, qui avance tou
 - **5 jalons** : Première planche, Herbier de poche, Flore complète, Une saison sous la loupe, Spécimen de référence.
 - Sauvegarde v7 (codes d’export `CLAUDIUS7:…`). Les parties et codes v1 à v8 se chargent tels quels, avec un herbier vide.
 
+## Nouveautés v10 — premières pages
+Une version d’accueil pour les nouveaux venus, sans nouvelle mécanique de jeu.
+- **Notes de terrain** : une courte note de carnet s’ouvre la première fois qu’on rencontre chaque mécanique
+  (1ᵉʳ filament, évolutions, pluie, saisons, jalons, sucre, sanglier, sécheresse, herbier, lueur, sporulation, spores et talents,
+  colonie rivale, poussée de carpophores, ambre : 15 notes). Posée en bas de la planche, elle se referme d’un toucher ou d’un
+  glissement ; une seule à la fois, jamais par-dessus une fenêtre, et celles d’un événement à l’écran passent devant.
+  Les gouttes et les lueurs apparaissent au-dessus d’une note ouverte. Toutes sont relisibles dans le Carnet,
+  section « Notes de terrain » (aperçu grisé pour celles pas encore rencontrées).
+  **Joueurs existants** : au chargement d’une partie d’avant la v10, les notes des mécaniques déjà connues sont marquées lues
+  d’après l’état de la partie (un événement débloqué depuis plus de 30 min de jeu compte comme vu).
+- **Objectifs guidés** sous les ressources : digérer 10 fois, 1ʳᵉ hyphe, 5 hyphes, 1ʳᵉ évolution, rhizomorphe, champignon de
+  litière, mycorhize. Un seul à la fois avec sa progression, puis « Premiers pas terminés » et ils disparaissent pour de bon
+  (conservé aux sporulations). Masqués d’office pour les parties déjà avancées.
+- **Aide contextuelle** : un « ? » discret sur chaque ressource (nutriments, production, sucre, ambre, prospection, spores),
+  chaque onglet, la saison et chaque effet en cours. Infobulle au survol, à l’appui long sur mobile (sans changer d’onglet),
+  au toucher du « ? » ou au clavier. Elle détaille d’où vient la valeur : production par générateur puis multiplicateur par
+  multiplicateur (base, évolutions, saison, évolutions globales, jalons, spores, talents, espèce, défis, ambre, reliques,
+  herbier, effets en cours, colonie rivale), sources et multiplicateurs du sucre, vitesse de prospection, effets de la saison…
+- **Réglages** (Carnet) : animations réduites (suit `prefers-reduced-motion` par défaut ; fige aussi le décor de la planche),
+  taille du texte en 3 niveaux, contraste renforcé, nombres en suffixes ou en notation scientifique, **langue FR/EN**.
+  Propres à chaque joueur : rangés à part de la partie (`claudius-settings-v1`, avec le même suffixe de bac à sable),
+  ils ne partent pas dans les codes d’export et « Effacer » ne les touche pas. Langue par défaut : celle du navigateur pour
+  un nouveau joueur, le français pour une partie existante. L’accueil propose « Play in English ».
+- **Traduction** : tous les textes sont dans `js/i18n.js` (contenu par identifiant, interface par clé), l’anglais est complet.
+  `data.js` ne garde que les chiffres. Pour la v11/v12 : ajouter les textes des nouveautés dans chaque langue, même clé.
+- **Équilibrage des 30 premières minutes**, au simulateur (bot qui clique puis s’arrête presque, médiane de 7 parties) :
+  champignon de litière 1 100 → 900, mycorhize 12 000 → 8 500. Joueur « typique » (2 clics/s puis 0,5) : 1ᵉʳ achat à 8 s,
+  1ʳᵉ mycorhize à 9 min (au lieu de 10 min 23), litière à 4 min 18 (au lieu de 6 min 16, fin du trou de 3–4 min sans
+  nouveauté) ; environ 60 nouveautés en 30 min. Joueur très actif : mycorhize à 7 min 36. À 2 h, les mêmes générateurs
+  qu’avant : l’avance du début se dissipe.
+- **Bon retour détaillé** : durée d’absence (et durée comptée si le plafond est atteint), nutriments rapportés et part des
+  4 générateurs qui ont le plus produit, sucre, spécimens rapportés (espèce, nouvelle ou niveau atteint), équivalent en
+  production en direct, rappel que rien n’a été perdu et du taux hors ligne.
+- **Notes de version** : bandeau discret en haut de page « Nouveautés de la version 10 » à l’arrivée d’une nouvelle version
+  (pas pour un tout nouveau joueur) ; une fois fermé, il ne revient qu’à la version suivante (dernière version vue gardée
+  dans les réglages du joueur). L’historique complet, de la v1 à la v10, au format changelog (Ajouté / Modifié / Retiré /
+  Corrigé), s’ouvre depuis le bandeau ou le Carnet. Contenu dans `js/changelog.js`, anglais dans `js/i18n.js`.
+- Sauvegarde v8 (codes `CLAUDIUS8:…`) : champs `notes` et `guideDone`. Les parties et codes v1 à v9 se chargent tels quels.
+
 ## Publier une mise à jour
 1. Modifier le jeu, le tester en local sur `http://127.0.0.1:8765/?sandbox=test`.
 2. Changer le numéro de version (sinon les joueurs peuvent garder l’ancienne version en cache) :
    `./nouvelle-version.sh 8.1` (met à jour les `?v=` de `index.html` et `VERSION` dans `sw.js`).
-3. Publier : `git add -A && git commit -m "v8.1 : …" && git push`. Le site est à jour en une à deux minutes.
+3. Ajouter l’entrée de la version dans `js/changelog.js` (en tête de liste, rédigée pour les joueurs), et sa traduction
+   anglaise dans `js/i18n.js` (`I18N.en.content.changelog`).
+4. Publier : `git add -A && git commit -m "v8.1 : …" && git push`. Le site est à jour en une à deux minutes.
    `.gitignore` garde hors ligne les fichiers de travail (`CLAUDE.md`, `TEST-IPHONE.md`, `.claude/`).
-4. Vérifier sur https://patetiik.github.io/claudius/?sandbox=test (jamais sur ta vraie partie).
+5. Vérifier sur https://patetiik.github.io/claudius/?sandbox=test (jamais sur ta vraie partie).
 
 ## Structure
-- `js/data.js` — tout le contenu (générateurs, saisons, évolutions, jalons, talents, sucre, événements, ambre et reliques, herbier) : c'est ici qu'on ajoute.
+- `js/data.js` — tout le contenu chiffré (générateurs, saisons, évolutions, jalons, talents, sucre, événements, ambre et reliques, herbier, notes de terrain et objectifs guidés) : c'est ici qu'on ajoute.
+- `js/i18n.js` — tous les textes, en français et en anglais (v10) : chaque ajout de contenu y met ses textes dans les deux langues.
 - `js/game.js` — logique pure et sauvegarde.
 - `js/network.js` — rendu canvas du réseau.
-- `js/ui.js`, `js/main.js` — interface et boucles.
+- `js/ui.js`, `js/main.js` — interface et boucles ; `js/help.js` — aide contextuelle (« ? » et infobulles, v10).
+- `js/util.js` — bac à sable, réglages du joueur, format des nombres.
 - `index.html` — page unique ; à chaque version, lancer `./nouvelle-version.sh` (voir ci-dessus).
 - `sw.js`, `manifest.webmanifest`, `icons/` — hors connexion et installation (v8).
 
@@ -192,3 +235,7 @@ Une couche de collection cumulative, sans aucune remise à zéro, qui avance tou
 - ~~v7 : lisibilité de la surface : carpophores à cueillir bien distincts des champignons de litière, rochers de lichen plus visibles ; retours de Nicolas après test en jeu réel et sur iPhone (rien à signaler).~~ ✅
 - ~~v8 : jeu jouable par d’autres personnes, sur n’importe quel appareil (pas seulement iPhone) : hébergement public, navigateurs et écrans variés (ordinateur, Android, tablette), sauvegarde propre à chaque joueur.~~ ✅
 - ~~v9 : herbier (collection cumulative de 12 espèces, prospection automatique même hors ligne, lueurs dans la litière, relique Loupe de naturaliste).~~ ✅
+- ~~v10 « Premières pages » : accueil des nouveaux joueurs — notes de carnet à la 1ʳᵉ rencontre de chaque mécanique (relisibles dans le Carnet), objectifs guidés des 5 premières minutes, « ? » et infobulles détaillant chaque valeur, réglages (animations réduites, taille du texte, contraste, format des nombres, langue FR/EN), équilibrage des 30 premières minutes, fenêtre « Bon retour » détaillée.~~ ✅
+- v11 (prévu) « Sporulation continue » : plus aucune remise à zéro — les spores se libèrent en continu d’après le total produit depuis toujours (courbe ≈ racine 4ᵉ, plafond de sécurité ; étude au simulateur : rythme comparable à l’actuel), grande fructification visuelle à chaque palier ; mutation d’espèce à tout moment (1 par saison) ; défis transformés en planches d’épreuve parallèles ; remplacement des bonus de début de cycle (Germination rapide, Banque de graines, Sève fossile) ; sucre et évolutions sucrées permanents (prix revus) ; migration sans perte des parties existantes ; **compensation des joueurs qui ont déjà sporulé** (« Héritage des anciennes forêts » : +2 % de production permanente par sporulation passée, plafonné à +100 %, jalon exclusif « Ancien des forêts », titre « Pionnier de la sporulation » dans le Carnet, spore dorée au cœur du réseau) avec une note de carnet chaleureuse à la première ouverture qui les remercie comme pionniers.
+- v12 (prévu) « Nouvelles planches » : 3 biomes colonisés en parallèle de la forêt principale, sur la base des planches d’épreuve de la v11 (Tourbière → tourbe, Forêt alpine → givre, Bois mort tropical → spores rares), 4 générateurs et une surface propres chacun, production continue et hors ligne, liens racinaires (bonus croisés), sélecteur de planches avec aperçus grisés, +3 espèces d’herbier.
+- v13 (prévu) « Ambiance et partage » : paysage sonore Web Audio par saison et météo (désactivé par défaut, coupé en arrière-plan), fiche « Partager ma planche » en image (partage natif ou PNG, sans serveur), cycle jour/nuit selon l’heure réelle, petite faune décorative.

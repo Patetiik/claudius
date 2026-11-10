@@ -30,6 +30,7 @@ const Network = {
   rng: Math.random,
   layer: null, layerDirty: true, layerScale: 0,   // réseau pré-rendu (redessiné seulement s'il change)
   soil: null,                                      // texture du sol, fixe
+  reduced: false,                                  // v10 : animations réduites (réglage du joueur)
 
   init(canvas) {
     this.canvas = canvas;
@@ -69,6 +70,12 @@ const Network = {
     this.layerDirty = true;
   },
   surfaceY() { return this.h * 0.2; },
+  // Horloge du décor : figée quand les animations sont réduites (ciel, herbe, neige, cœur qui respire)
+  clock() {
+    if (!this.reduced) return performance.now() / 1000;
+    if (this._frozen == null) this._frozen = performance.now() / 1000;
+    return this._frozen;
+  },
   coreScreen() { return { x: this.w / 2, y: this.surfaceY() + (this.h - this.surfaceY()) * 0.42 }; },
   r(a, b) { return a + this.rng() * (b - a); },
 
@@ -128,7 +135,7 @@ const Network = {
     let growing = false;
     for (const n of this.nodes) if (n.grow < 1) { n.grow = Math.min(1, n.grow + dt * 2); growing = true; }
     if (growing) this.layerDirty = true;
-    const target = Math.min(60, Math.floor(Math.log10(nps + 1) * 8));
+    const target = Math.min(60, Math.floor(Math.log10(nps + 1) * 8)) / (this.reduced ? 4 : 1);
     if (this.pulses.length < target && Math.random() < 0.3) this.spawnPulse();
     for (const p of this.pulses) {
       p.t += dt * p.speed;
@@ -257,7 +264,7 @@ const Network = {
     ctx.translate(c.x, c.y);
     ctx.scale(sc, sc);
     // Cœur de Claudius : un nœud organique qui respire
-    const t = performance.now() / 1000;
+    const t = this.clock();
     const r = (13 + Math.sin(t * 2) * 1.2 + this.corePulse * 8) / sc;
     const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.6);
     halo.addColorStop(0, 'rgba(255,236,190,0.55)');
@@ -319,7 +326,7 @@ const Network = {
     const health = Math.max(0, d.hp) / (d.max || 1);
     const shown = Math.max(2, Math.ceil(rv.nodes.length * grow * (rv.end ? 1 : 0.35 + 0.65 * health)));
     const X = n => n.x * w, Y = n => sy + n.y * sh;
-    const t = performance.now() / 1000;
+    const t = this.clock();
     ctx.save();
     ctx.lineCap = 'round';
     for (let pass = 0; pass < 2; pass++) {
@@ -361,7 +368,7 @@ const Network = {
   drawSurface(state, season, env) {
     const { ctx, w } = this;
     const sy = this.surfaceY();
-    const t = performance.now() / 1000;
+    const t = this.clock();
     const id = season.id;
     const dry = !!env.drought;
     const ground = this.GROUND[id];

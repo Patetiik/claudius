@@ -8,10 +8,10 @@
   <meta name="description" content="Jeu idle dans le navigateur : tu es une spore qui germe sous une forêt. Digère la litière, tisse ton réseau, pactise avec les arbres.">
   <meta name="theme-color" content="#14100c">
   <meta name="color-scheme" content="dark">
-  <link rel="manifest" href="manifest.webmanifest?v=9.0">
-  <link rel="icon" href="icons/icon.svg?v=9.0" type="image/svg+xml">
-  <link rel="icon" href="icons/icon-192.png?v=9.0" type="image/png" sizes="192x192">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=9.0">
+  <link rel="manifest" href="manifest.webmanifest?v=10.0">
+  <link rel="icon" href="icons/icon.svg?v=10.0" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png?v=10.0" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=10.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Claudius">
@@ -24,7 +24,7 @@
   <meta property="og:url" content="https://patetiik.github.io/claudius/">
   <meta property="og:image" content="https://patetiik.github.io/claudius/icons/icon-512.png">
   <meta name="twitter:card" content="summary">
-  <link rel="stylesheet" href="css/style.css?v=9.0">
+  <link rel="stylesheet" href="css/style.css?v=10.0">
 </head>
 <body>
   <header class="topbar">
@@ -34,72 +34,81 @@
         <path d="M13 17h6l1.2 9.5c.1.8-.5 1.5-1.3 1.5h-5.8c-.8 0-1.4-.7-1.3-1.5z" fill="currentColor" opacity=".55"/>
         <circle cx="11" cy="11" r="1.4" fill="var(--bg)"/><circle cx="19.5" cy="9.5" r="1.1" fill="var(--bg)"/><circle cx="23" cy="13" r=".9" fill="var(--bg)"/>
       </svg>
-      <div><div class="wordmark">Claudius</div><div class="tagline">Journal d’un mycélium · v9</div></div>
+      <div><div class="wordmark">Claudius</div><div class="tagline" data-i18n="top.tagline">Journal d’un mycélium · v10</div></div>
     </div>
-    <div class="season" id="season">
-      <span id="season-name">Printemps</span>
+    <div class="season" id="season" data-help="season">
+      <span id="season-name">Printemps</span><span class="help q-season" data-help="season" aria-hidden="true">?</span>
       <div class="bar"><div id="season-bar"></div></div>
     </div>
     <div class="top-actions">
-      <button id="btn-save" class="ghost" title="Sauvegarder la partie">Sauver</button>
-      <button id="btn-reset" class="ghost danger" title="Effacer la partie">Effacer</button>
+      <button id="btn-save" class="ghost" title="Sauvegarder la partie" data-i18n="top.save" data-i18n-title="top.saveTitle">Sauver</button>
+      <button id="btn-reset" class="ghost danger" title="Effacer la partie" data-i18n="top.reset" data-i18n-title="top.resetTitle">Effacer</button>
     </div>
   </header>
+  <div id="news" class="news hidden" role="region">
+    <span id="news-text" class="news-text"></span>
+    <button type="button" id="news-open" class="news-link"></button>
+    <button type="button" id="news-close" class="news-x">✕</button>
+  </div>
 
   <main class="layout">
     <section class="left">
       <div class="resources">
         <div class="res-main">
-          <div class="res-value" id="nutrients">0</div>
-          <div class="res-label">nutriments</div>
-          <div class="res-rate"><span id="nps">0</span> /s</div>
+          <div class="res-value" id="nutrients" data-help="nutrients">0</div>
+          <div class="res-label" data-help="nutrients"><span data-i18n="res.nutrients">nutriments</span><button type="button" class="help" data-help="nutrients" aria-label="Aide">?</button></div>
+          <div class="res-rate" data-help="nps"><span id="nps">0</span> /s<button type="button" class="help" data-help="nps" aria-label="Aide">?</button></div>
         </div>
         <div class="res-side">
           <div id="species-box" class="muted small"></div>
           <div id="chal-box" class="hidden chal-banner">
-            <div><span id="chal-name"></span> · <span id="chal-pct">0</span> %</div>
+            <div><span id="chal-name"></span> · <span id="chal-pct">0</span></div>
             <div class="progress"><div id="chal-bar"></div></div>
-            <button id="btn-abandon" class="small-btn">Abandonner</button>
+            <button id="btn-abandon" class="small-btn" data-i18n="res.abandon">Abandonner</button>
           </div>
-          <div id="sugar-box" class="hidden stat-line"><span class="dot sugar-dot"></span><strong id="sugar">0</strong> sucre <span class="muted">+<span id="sugar-rate">0</span>/s</span></div>
-          <button id="btn-water" class="hidden water">Arroser · <span id="water-cost">0</span> sucre</button>
+          <div id="sugar-box" class="hidden stat-line" data-help="sugar"><span class="dot sugar-dot"></span><strong id="sugar">0</strong> <span data-i18n="res.sugar">sucre</span> <span class="muted">+<span id="sugar-rate">0</span>/s</span><button type="button" class="help" data-help="sugar" aria-label="Aide">?</button></div>
+          <button id="btn-water" class="hidden water">Arroser</button>
           <div id="rival-box" class="hidden rival-banner">
-            <div>Colonie rivale · <span id="rival-hp">0</span> · <span id="rival-left">0</span> s</div>
+            <div><span data-i18n="res.rival">Colonie rivale</span> · <span id="rival-hp">0</span> · <span id="rival-left">0</span> s</div>
             <div class="progress"><div id="rival-bar"></div></div>
-            <div class="small muted">Clique le réseau pour la repousser</div>
+            <div class="small muted" data-i18n="res.rivalHint">Clique le réseau pour la repousser</div>
           </div>
           <div id="flush-box" class="hidden flush-banner">
-            <div><span class="dot shroom-dot"></span>Carpophores · <span id="flush-left">0</span> à cueillir · <span id="flush-time">0</span> s</div>
-            <div class="small muted">Les grands champignons clairs, à la surface</div>
+            <div><span class="dot shroom-dot"></span><span id="flush-text"></span></div>
+            <div class="small muted" data-i18n="res.flushHint">Les grands champignons clairs, à la surface</div>
           </div>
-          <div id="amber-box" class="hidden stat-line"><span class="dot amber-dot"></span><strong id="amber">0</strong> ambre <span class="muted">×<span id="amber-bonus">1</span></span></div>
-          <div id="herb-box" class="hidden stat-line herb-line" title="Le réseau prospecte la forêt pour ton herbier, même quand tu ne joues pas"><span class="dot herb-dot"></span>Prospection <strong id="prospect-pct">0</strong> %<span class="mini-bar"><i id="prospect-mini"></i></span></div>
-          <div id="spores-box" class="hidden stat-line"><span class="dot spore-dot"></span><strong id="spores">0</strong> spores <span class="muted">+<span id="spore-bonus">0</span> %</span></div>
+          <div id="amber-box" class="hidden stat-line" data-help="amber"><span class="dot amber-dot"></span><strong id="amber">0</strong> <span data-i18n="res.amber">ambre</span> <span class="muted">×<span id="amber-bonus">1</span></span><button type="button" class="help" data-help="amber" aria-label="Aide">?</button></div>
+          <div id="herb-box" class="hidden stat-line herb-line" data-help="prospect"><span class="dot herb-dot"></span><span data-i18n="res.prospect">Prospection</span> <strong id="prospect-pct">0</strong><span class="mini-bar"><i id="prospect-mini"></i></span><button type="button" class="help" data-help="prospect" aria-label="Aide">?</button></div>
+          <div id="spores-box" class="hidden stat-line" data-help="spores"><span class="dot spore-dot"></span><strong id="spores">0</strong> <span data-i18n="res.spores">spores</span> <span class="muted">+<span id="spore-bonus">0</span></span><button type="button" class="help" data-help="spores" aria-label="Aide">?</button></div>
           <div id="buffs"></div>
         </div>
       </div>
+      <div id="guide" class="guide hidden" aria-live="polite">
+        <div class="guide-line"><span id="guide-step" class="guide-step"></span><span id="guide-text" class="guide-text"></span><span id="guide-count" class="guide-count"></span></div>
+        <div class="guide-bar"><i id="guide-bar"></i></div>
+      </div>
       <div class="network-wrap">
         <canvas id="network"></canvas>
-        <div class="network-hint" id="hint">Clique sur le cœur de Claudius pour digérer la litière</div>
+        <div class="network-hint" id="hint" data-i18n="plate.hint">Clique sur le cœur de Claudius pour digérer la litière</div>
         <div id="floaters"></div>
       </div>
-      <div class="plate-caption"><span>Pl. I</span> — Réseau de <em>Claudius</em>, coupe du sol forestier</div>
+      <div class="plate-caption" data-i18n-html="plate.caption"><span>Pl. I</span> — Réseau de <em>Claudius</em>, coupe du sol forestier</div>
       <div class="log" id="log"></div>
     </section>
 
     <section class="right">
       <nav class="tabs">
-        <button data-tab="gens" class="active">Réseau</button>
-        <button data-tab="upgrades">Évolutions <span class="badge hidden" id="upg-badge"></span></button>
-        <button data-tab="achievements">Jalons</button>
-        <button data-tab="prestige" id="tab-prestige">Sporulation <span class="badge hidden" id="talent-badge"></span></button>
-        <button data-tab="amber">Ambre <span class="badge hidden" id="relic-badge"></span></button>
-        <button data-tab="herbier">Herbier <span class="badge hidden" id="herb-badge"></span></button>
-        <button data-tab="stats">Carnet</button>
+        <button data-tab="gens" class="active" data-help="tab-gens"><span data-i18n="tab.gens">Réseau</span><span class="help q-tab" data-help="tab-gens" aria-hidden="true">?</span></button>
+        <button data-tab="upgrades" data-help="tab-upgrades"><span data-i18n="tab.upgrades">Évolutions</span><span class="help q-tab" data-help="tab-upgrades" aria-hidden="true">?</span> <span class="badge hidden" id="upg-badge"></span></button>
+        <button data-tab="achievements" data-help="tab-achievements"><span data-i18n="tab.achievements">Jalons</span><span class="help q-tab" data-help="tab-achievements" aria-hidden="true">?</span></button>
+        <button data-tab="prestige" id="tab-prestige" data-help="tab-prestige"><span data-i18n="tab.prestige">Sporulation</span><span class="help q-tab" data-help="tab-prestige" aria-hidden="true">?</span> <span class="badge hidden" id="talent-badge"></span></button>
+        <button data-tab="amber" data-help="tab-amber"><span data-i18n="tab.amber">Ambre</span><span class="help q-tab" data-help="tab-amber" aria-hidden="true">?</span> <span class="badge hidden" id="relic-badge"></span></button>
+        <button data-tab="herbier" data-help="tab-herbier"><span data-i18n="tab.herbier">Herbier</span><span class="help q-tab" data-help="tab-herbier" aria-hidden="true">?</span> <span class="badge hidden" id="herb-badge"></span></button>
+        <button data-tab="stats" data-help="tab-stats"><span data-i18n="tab.stats">Carnet</span><span class="help q-tab" data-help="tab-stats" aria-hidden="true">?</span></button>
       </nav>
 
       <div class="tab-panel active" id="tab-gens">
-        <div class="buy-mode"><span>Acheter</span>
+        <div class="buy-mode"><span data-i18n="gens.buy">Acheter</span>
           <button data-mode="1" class="active">×1</button>
           <button data-mode="10">×10</button>
           <button data-mode="100">×100</button>
@@ -110,111 +119,121 @@
 
       <div class="tab-panel" id="tab-upgrades">
         <div id="upg-list" class="upg-grid"></div>
-        <p class="muted small" id="upg-empty">Continue de grandir : de nouvelles évolutions apparaîtront.</p>
+        <p class="muted small" id="upg-empty" data-i18n="upg.empty">Continue de grandir : de nouvelles évolutions apparaîtront.</p>
         <div class="sugar-section">
-          <h3>Évolutions sucrées</h3>
+          <h3 data-i18n="upg.sugarTitle">Évolutions sucrées</h3>
           <p class="muted small" id="sugar-hint">Les arbres te paient en sucre. Ces évolutions sont perdues à la sporulation.</p>
           <div id="sugar-list" class="upg-grid"></div>
         </div>
       </div>
 
       <div class="tab-panel" id="tab-achievements">
-        <p class="muted small">Chaque jalon atteint donne +2 % de production.</p>
+        <p class="muted small" data-i18n="ach.intro">Chaque jalon atteint donne +2 % de production.</p>
         <div id="ach-list" class="ach-grid"></div>
       </div>
 
       <div class="tab-panel" id="tab-prestige">
         <div class="prestige-card">
-          <h2>Sporulation</h2>
-          <p>Claudius fait éclore un immense carpophore et libère ses spores dans le vent.
-            Le réseau actuel disparaît, mais chaque spore germera dans une nouvelle forêt :
-            <strong>+5 % de production par spore</strong>, pour toujours.
-            Les spores suivent la racine 4ᵉ des nutriments du cycle (16× plus de nutriments pour 2× plus de spores).</p>
-          <p>Spores gagnées en sporulant maintenant : <strong id="prestige-gain">0</strong></p>
+          <h2 data-i18n="pre.title">Sporulation</h2>
+          <p data-i18n-html="pre.text"></p>
+          <p data-i18n-html="pre.gain"></p>
           <div class="progress"><div id="prestige-bar"></div></div>
-          <p class="muted small">Prochaine spore : <span id="prestige-have">0</span> / <span id="prestige-next">?</span> nutriments sur ce cycle.</p>
-          <button id="btn-prestige" class="big">Sporuler</button>
+          <p class="muted small" data-i18n-html="pre.next"></p>
+          <button id="btn-prestige" class="big" data-i18n="pre.button">Sporuler</button>
         </div>
         <div class="talents-head">
-          <h3>Espèce du prochain cycle</h3>
+          <h3 data-i18n="pre.speciesTitle"></h3>
         </div>
-        <p class="muted small">Appliquée à ta prochaine sporulation (ou au lancement d’un défi). Chaque espèce change ta façon de jouer.</p>
+        <p class="muted small" data-i18n="pre.speciesIntro"></p>
         <div id="species-list" class="species-grid"></div>
 
         <div class="talents-head">
-          <h3>Arbre de spores</h3>
-          <div><strong id="spores-avail">0</strong> spore(s) à dépenser</div>
+          <h3 data-i18n="pre.treeTitle"></h3>
+          <div data-i18n-html="pre.treeAvail"></div>
         </div>
-        <p class="muted small">Les talents sont permanents. Les spores dépensées comptent toujours pour le bonus de production.</p>
+        <p class="muted small" data-i18n="pre.treeIntro"></p>
         <div class="tree-wrap">
           <div id="talent-tree" class="talent-tree"></div>
-          <div class="tree-teaser hidden" id="tree-teaser">Sporule une première fois pour gagner des spores et débloquer l’arbre.</div>
+          <div class="tree-teaser hidden" id="tree-teaser" data-i18n="pre.treeTeaser"></div>
         </div>
 
         <div class="talents-head">
-          <h3>Défis</h3>
-          <div class="small"><strong id="chal-done-count">0</strong> / <span id="chal-total"></span> réussis</div>
+          <h3 data-i18n="pre.chalTitle"></h3>
+          <div class="small" data-i18n-html="pre.chalCount"></div>
         </div>
-        <p class="muted small">Lancer un défi fait sporuler (tu gardes les spores gagnées). Atteins l’objectif sur ce cycle pour une récompense permanente.</p>
+        <p class="muted small" data-i18n="pre.chalIntro"></p>
         <div class="tree-wrap">
           <div id="chal-list" class="chal-list"></div>
-          <div class="tree-teaser hidden" id="chal-teaser">Sporule une première fois pour débloquer les défis.</div>
+          <div class="tree-teaser hidden" id="chal-teaser" data-i18n="pre.chalTeaser"></div>
         </div>
       </div>
 
       <div class="tab-panel" id="tab-amber">
         <div class="prestige-card amber-card">
-          <h2>Ambre</h2>
-          <p>Au fil des sporulations, une partie de tes spores tombe dans la résine des vieux arbres et s’y fige.
-            Rien n’est perdu, rien n’est remis à zéro : chaque éclat d’ambre donne
-            <strong>+25 % de production</strong>, pour toujours, et se dépense en reliques.</p>
-          <p>Ambre : <strong id="fossil-gain">0</strong></p>
+          <h2 data-i18n="amb.title">Ambre</h2>
+          <p data-i18n-html="amb.text"></p>
+          <p data-i18n-html="amb.have"></p>
           <div class="progress"><div id="fossil-bar"></div></div>
-          <p class="muted small">Prochain ambre : <span id="fossil-have">0</span> / <span id="fossil-next">?</span> spores gagnées. Il se forme tout seul à la sporulation.</p>
+          <p class="muted small" data-i18n-html="amb.next"></p>
         </div>
         <div class="talents-head">
-          <h3>Reliques</h3>
-          <div><strong id="amber-avail">0</strong> ambre à dépenser</div>
+          <h3 data-i18n="amb.relics"></h3>
+          <div data-i18n-html="amb.avail"></div>
         </div>
-        <p class="muted small">Les reliques sont permanentes et survivent aux sporulations. L’ambre dépensé compte toujours pour le bonus.</p>
+        <p class="muted small" data-i18n="amb.intro"></p>
         <div class="tree-wrap">
           <div id="relic-list" class="upg-grid relic-grid"></div>
-          <div class="tree-teaser hidden" id="relic-teaser">Gagne <strong id="fossil-unlock"></strong> spores au total pour former ton premier ambre.</div>
+          <div class="tree-teaser hidden" id="relic-teaser" data-i18n-html="amb.teaser"></div>
         </div>
       </div>
 
       <div class="tab-panel" id="tab-herbier">
         <div class="prestige-card herb-card">
-          <h2>Herbier</h2>
-          <p>Tes filaments fouillent la forêt et rapportent des spécimens de la saison en cours, même quand tu ne joues pas.
-            Chaque espèce se perfectionne jusqu’au niveau 5 : <strong>+3 % de production par niveau</strong>, plus son effet propre.
-            L’herbier se garde pour toujours, sporulations comprises.</p>
+          <h2 data-i18n="herb.title">Herbier</h2>
+          <p data-i18n-html="herb.text"></p>
           <p id="herb-summary"></p>
           <div class="progress"><div id="prospect-bar"></div></div>
           <p class="muted small" id="prospect-info"></p>
         </div>
         <div id="herb-list"></div>
-        <p class="muted small herb-foot">Guette aussi les lueurs dans la litière : en cliquer une fait trouver un spécimen tout de suite, même hors saison.</p>
+        <p class="muted small herb-foot" data-i18n="herb.foot"></p>
       </div>
 
       <div class="tab-panel" id="tab-stats">
-        <table class="stats" id="stats"></table>
+        <div class="carnet-sec">
+          <h3 data-i18n="set.title">Réglages</h3>
+          <p class="muted small" data-i18n="set.intro"></p>
+          <div id="settings" class="settings"></div>
+        </div>
+        <div class="carnet-sec">
+          <div class="talents-head"><h3 data-i18n="notes.title">Notes de terrain</h3><div class="small" id="notes-count"></div></div>
+          <p class="muted small" data-i18n="notes.intro"></p>
+          <div id="notes-list" class="notes-list"></div>
+        </div>
+        <div class="carnet-sec">
+          <div class="talents-head"><h3 data-i18n="cl.title">Notes de version</h3><div class="small" id="cl-current"></div></div>
+          <p class="muted small" data-i18n="cl.intro"></p>
+          <div class="save-actions"><button type="button" id="btn-changelog" data-i18n="cl.open">Voir l’historique</button></div>
+        </div>
+        <div class="carnet-sec">
+          <h3 data-i18n="stats.title">Relevés</h3>
+          <table class="stats" id="stats"></table>
+        </div>
         <div class="save-box">
-          <h3>Sauvegarde</h3>
-          <p class="muted small">Copie ce code pour garder ta partie ailleurs ou la passer sur un autre navigateur.</p>
-          <textarea id="save-text" rows="4" spellcheck="false" placeholder="Colle ici un code de sauvegarde pour l’importer"></textarea>
+          <h3 data-i18n="save.title">Sauvegarde</h3>
+          <p class="muted small" data-i18n="save.intro"></p>
+          <textarea id="save-text" rows="4" spellcheck="false" data-i18n-ph="save.placeholder"></textarea>
           <div class="save-actions">
-            <button id="btn-export">Exporter</button>
-            <button id="btn-download">Télécharger (.txt)</button>
-            <button id="btn-import">Importer</button>
+            <button id="btn-export" data-i18n="save.export">Exporter</button>
+            <button id="btn-download" data-i18n="save.download">Télécharger (.txt)</button>
+            <button id="btn-import" data-i18n="save.import">Importer</button>
           </div>
           <div class="small" id="save-msg"></div>
-          <p class="muted small">Ta partie est gardée dans ce navigateur, sur cet appareil. Pour la retrouver ailleurs, exporte ce code.
-            Sur Safari (iPhone, iPad, Mac), un site qu’on n’ouvre pas pendant une semaine peut être effacé : garde un code de côté, ou ajoute le jeu à l’écran d’accueil.</p>
-          <h3>Sauvegarde de secours</h3>
-          <p class="muted small">Le jeu garde à part ta partie la plus avancée. Elle n’est jamais remplacée par une partie moins avancée, même après « Effacer ».</p>
-          <div class="small" id="backup-info">Aucune pour l’instant.</div>
-          <div class="save-actions"><button id="btn-restore" disabled>Restaurer le secours</button></div>
+          <p class="muted small" data-i18n="save.where"></p>
+          <h3 data-i18n="save.backupTitle">Sauvegarde de secours</h3>
+          <p class="muted small" data-i18n="save.backupIntro"></p>
+          <div class="small" id="backup-info"></div>
+          <div class="save-actions"><button id="btn-restore" disabled data-i18n="save.restore">Restaurer le secours</button></div>
         </div>
       </div>
     </section>
@@ -223,15 +242,18 @@
   <div class="modal hidden" id="modal">
     <div class="modal-box">
       <div id="modal-content"></div>
-      <button id="modal-ok" class="big">Continuer</button>
+      <button id="modal-ok" class="big" data-i18n="modal.ok">Continuer</button>
     </div>
   </div>
 
-  <script src="js/util.js?v=9.0"></script>
-  <script src="js/data.js?v=9.0"></script>
-  <script src="js/game.js?v=9.0"></script>
-  <script src="js/network.js?v=9.0"></script>
-  <script src="js/ui.js?v=9.0"></script>
-  <script src="js/main.js?v=9.0"></script>
+  <script src="js/util.js?v=10.0"></script>
+  <script src="js/data.js?v=10.0"></script>
+  <script src="js/i18n.js?v=10.0"></script>
+  <script src="js/changelog.js?v=10.0"></script>
+  <script src="js/game.js?v=10.0"></script>
+  <script src="js/network.js?v=10.0"></script>
+  <script src="js/help.js?v=10.0"></script>
+  <script src="js/ui.js?v=10.0"></script>
+  <script src="js/main.js?v=10.0"></script>
 </body>
 </html>

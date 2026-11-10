@@ -1,16 +1,10 @@
 // Logique pure du jeu (état, production, achats, sauvegarde)
-// ?sandbox=<nom> : partie de test isolée, sur une autre clé (voir CLAUDE.md)
-const SANDBOX = (() => {
-  try {
-    const v = new URLSearchParams(location.search).get('sandbox');
-    return v == null ? null : (v.replace(/[^\w-]/g, '').slice(0, 32) || 'test');
-  } catch (e) { return null; }
-})();
+// ?sandbox=<nom> : partie de test isolée, sur une autre clé (voir CLAUDE.md ; SANDBOX est défini dans util.js)
 const SAVE_KEY = 'claudius-save-v1' + (SANDBOX ? ':sandbox:' + SANDBOX : '');
 const BACKUP_KEY = SAVE_KEY + ':backup';    // la partie la plus avancée jamais vue
 const CORRUPT_KEY = SAVE_KEY + ':corrupt';  // copie brute d'une sauvegarde illisible
-const SAVE_VERSION = 7;
-const EXPORT_PREFIX = 'CLAUDIUS7:';
+const SAVE_VERSION = 8;
+const EXPORT_PREFIX = 'CLAUDIUS8:';
 const NET_LOG_MAX = 900;   // = MAX_BRANCHES du rendu
 const EXPORT_PREFIX_RE = /^CLAUDIUS\d+:/;  // accepte aussi les codes v2
 
@@ -36,6 +30,8 @@ function freshState(keep) {
     herbarium: {},     // V9 : niveau de chaque espèce trouvée (jamais remis à zéro)
     prospect: 0,       // V9 : avancement de la prospection (0 → 1 = une trouvaille)
     nextGlow: 240,     // V9 : prochaine lueur dans la litière
+    notes: {},         // V10 : notes de terrain déjà ouvertes (jamais remises à zéro)
+    guideDone: false,  // V10 : objectifs guidés des premières minutes terminés
     // Réseau dessiné : graine + ordre des branches (1 lettre = 1 branche, 'a' = hyphe…).
     // Rejouer ce journal avec la même graine redonne exactement le même dessin.
     netSeed: (Math.random() * 4294967296) >>> 0,
@@ -109,12 +105,12 @@ const Game = {
     return this.sporesAvailable() >= t.cost ? 'buyable' : 'poor';
   },
   buyTalent(id) {
-    const t = TALENTS.find(x => x.id === id);
-    if (!t || this.talentState(t) !== 'buyable') return false;
-    this.s.sporesSpent += t.cost;
+    const x = TALENTS.find(y => y.id === id);
+    if (!x || this.talentState(x) !== 'buyable') return false;
+    this.s.sporesSpent += x.cost;
     this.s.talents[id] = true;
     this.dirty();
-    this.emit('log', `🌳 Talent : ${t.name}`);
+    this.emit('log', t('log.talent', { name: x.name }));
     return true;
   },
   offlineCap() { return (this.has('dormancy') ? 24 : 8) * 3600; },
@@ -142,7 +138,7 @@ const Game = {
   },
   abandonChallenge() {
     if (!this.s.challenge) return false;
-    this.emit('log', `🏳️ Défi abandonné : ${this.chal().name}`);
+    this.emit('log', t('log.chalAbandon', { name: this.chal().name }));
     this.s.challenge = null;
     this.dirty();
     return true;
@@ -160,18 +156,26 @@ const Game = {
   // ---------- Sucre (V3) ----------
   sug(id) { return !!this.s.sugarUpg[id]; },
   sugarUnlocked() { return this.s.gens.myco > 0 || this.s.sugar > 0 || this.s.stats.sugarEarned > 0; },
-  sugarRate() {
+  sugarBase() {
     let r = 0;
     for (const id in SUGAR_PER_GEN) r += SUGAR_PER_GEN[id] * (this.s.gens[id] || 0);
+    return r;
+  },
+  // Multiplicateurs du sucre, un par un (détaillés dans l'aide)
+  sugarParts() {
     let sm = this.season().sugar || 1;
     if (sm < 1 && ((this.season().id === 'hiver' && this.chalDone('winter')) || this.relic('calendar'))) sm = 1;
-    r *= sm;
-    r *= this.sp().sugar || 1;
-    if (this.sug('symb')) r *= 3;
-    if (this.relic('sapfossil')) r *= 2;
-    if (this.droughtActive()) r *= 0.5;
-    r *= this.herbKind('sugar');
-    return r;
+    return [
+      { k: 'seasonMult', v: { name: seasonLabel(this.season()) }, m: sm },
+      { k: 'species', v: { name: this.sp().name }, m: this.sp().sugar || 1 },
+      { k: 'symb', m: this.sug('symb') ? 3 : 1 },
+      { k: 'sapfossil', m: this.relic('sapfossil') ? 2 : 1 },
+      { k: 'drought', m: this.droughtActive() ? 0.5 : 1 },
+      { k: 'herbPlain', m: this.herbKind('sugar') },
+    ];
+  },
+  sugarRate() {
+    return this.sugarParts().reduce((r, p) => r * p.m, this.sugarBase());
   },
   fermentMult() {
     if (!this.sug('ferment')) return 1;
@@ -187,7 +191,7 @@ const Game = {
     this.s.sugar -= u.cost;
     this.s.sugarUpg[id] = true;
     this.dirty();
-    this.emit('log', `🍯 Évolution sucrée : ${u.name}`);
+    this.emit('log', t('log.sugarUpg', { name: u.name }));
     return true;
   },
 
@@ -198,8 +202,8 @@ const Game = {
     this.s.stats.boars++;
     const gain = Math.max(this.nps() * 90, this.clickValue() * 50, 100) * (this.sp().boarReward || 1) * this.herbKind('boar');
     this.earn(gain);
-    this.addBuff('prod', 2, 45, '🐗 Spores dispersées : production ×2');
-    const msg = `🐗 Le sanglier déterre tes truffes et disperse tes spores : +${fmt(gain)} nutriments, production ×2 pendant 45 s`;
+    this.addBuff('prod', 2, 45, 'buff.boar');
+    const msg = t('log.boar', { gain: fmt(gain) });
     this.emit('log', msg);
     return msg;
   },
@@ -209,10 +213,10 @@ const Game = {
   startDrought() {
     if (this.droughtActive() || this.chalDone('desert')) return;
     const mult = this.sug('starch') ? 0.75 : 0.5;
-    this.s.buffs.push({ kind: 'prod', mult, left: DROUGHT_DURATION, total: DROUGHT_DURATION, drought: true,
-      label: `☀️ Sécheresse : production ×${String(mult).replace('.', ',')}` });
+    this.s.buffs.push({ kind: 'prod', mult, left: DROUGHT_DURATION, total: DROUGHT_DURATION, drought: true, lk: 'buff.drought' });
     this.dirty();
-    this.emit('log', '☀️ Sécheresse ! Le sol craquelle, plus de pluie. Arrose avec ton sucre ou tiens bon.');
+    this.emit('drought');
+    this.emit('log', t('log.drought'));
   },
   waterCost() { return Math.max(5, Math.ceil(this.sugarRate() * 20 / (this.sug('starch') ? 2 : 1))); },
   waterDrought() {
@@ -221,7 +225,7 @@ const Game = {
     this.s.sugar -= this.waterCost();
     b.left = 0;
     this.endBuffs();
-    this.emit('log', '🌧️ Tes arbres libèrent leur sève : la sécheresse est terminée.');
+    this.emit('log', t('log.watered'));
     return true;
   },
   endBuffs() {
@@ -251,22 +255,52 @@ const Game = {
     const m = this.s.buffs.filter(b => b.kind === kind).reduce((m, b) => m * b.mult, 1);
     return kind === 'prod' && this.s.rival ? m * RIVAL_STEAL : m;
   },
+  // Multiplicateurs permanents, un par un (v10 : détaillés dans l'aide de la production)
+  // k : clé du libellé (help.<k>) · v : variables du libellé · m : multiplicateur
+  permanentParts() {
+    let up = 1;
+    for (const u of UPGRADES) if (u.type === 'global' && u.mult && this.s.upgrades[u.id]) up *= u.mult;
+    let tal = 1;
+    if (this.has('vigor')) tal *= 1.25;
+    if (this.has('giant')) tal *= 2;
+    if (this.has('aurora')) tal *= 1 + Math.min(0.6, 0.02 * this.s.cycleSeasons);
+    let ch = 1;
+    if (this.chalDone('noclick')) ch *= 1.1;
+    if (this.inChal('desert')) ch *= 0.5;
+    const per = this.sporeBonusPer();
+    return [
+      { k: 'upgGlobal', m: up },
+      { k: 'ach', v: { n: this.achCount() }, m: 1 + 0.02 * this.achCount() },
+      { k: 'spores', v: { n: fmt(this.s.spores), p: fmtDec(per * 100) }, m: 1 + per * this.s.spores },
+      { k: 'talents', m: tal },
+      { k: 'ferment', m: this.fermentMult() },
+      { k: 'species', v: { name: this.sp().name }, m: this.sp().prod || 1 },
+      { k: 'challenges', m: ch },
+      { k: 'amber', v: { n: fmt(this.s.amber) }, m: this.amberMult() },
+      { k: 'relics', m: this.relic('planet') ? 3 : 1 },
+      { k: 'herb', v: { n: this.herbLevels() }, m: this.herbMult() },
+    ];
+  },
   permanentMult() {
-    let m = 1;
-    for (const u of UPGRADES) if (u.type === 'global' && u.mult && this.s.upgrades[u.id]) m *= u.mult;
-    m *= 1 + 0.02 * this.achCount();
-    m *= 1 + this.sporeBonusPer() * this.s.spores;
-    if (this.has('vigor')) m *= 1.25;
-    if (this.has('giant')) m *= 2;
-    m *= this.fermentMult();
-    m *= this.sp().prod || 1;
-    if (this.chalDone('noclick')) m *= 1.1;
-    if (this.inChal('desert')) m *= 0.5;
-    m *= this.amberMult();
-    if (this.relic('planet')) m *= 3;
-    if (this.has('aurora')) m *= 1 + Math.min(0.6, 0.02 * this.s.cycleSeasons);
-    m *= this.herbMult();
-    return m;
+    return this.permanentParts().reduce((m, p) => m * p.m, 1);
+  },
+  // Production détaillée : base → évolutions des générateurs → saison → permanents → effets en cours
+  prodBreakdown() {
+    let base = 0, upg = 0, seas = 0;
+    const gens = [];
+    for (const g of GENERATORS) {
+      const n = this.s.gens[g.id];
+      if (!n) continue;
+      const b = g.baseProd * n, u = b * this.genUpgradeMult(g.id), s = u * this.seasonMult(g.id);
+      base += b; upg += u; seas += s;
+      gens.push({ g, n, prod: this.genProd(g.id) });
+    }
+    const buffs = this.s.buffs.filter(b => b.kind === 'prod').reduce((m, b) => m * b.mult, 1);
+    return {
+      base, gens: gens.sort((a, b) => b.prod - a.prod),
+      genUpg: base ? upg / base : 1, season: upg ? seas / upg : 1,
+      parts: this.permanentParts(), buffs, rival: this.s.rival ? RIVAL_STEAL : 1, total: this.nps(),
+    };
   },
   genUnitProd(id) {
     const g = GENERATORS.find(x => x.id === id);
@@ -355,7 +389,7 @@ const Game = {
     this.s.nutrients -= u.cost;
     this.s.upgrades[id] = true;
     this.dirty();
-    if (!silent) this.emit('log', `✨ Évolution : ${u.name}`);
+    if (!silent) this.emit('log', t('log.upgrade', { name: u.name }));
     return true;
   },
 
@@ -368,22 +402,23 @@ const Game = {
     let msg;
     if (r < 0.5) {
       const d = this.has('frenzy') ? 60 : 30;
-      this.addBuff('prod', 3, d, '🌧️ Ondée : production ×3');
-      msg = `🌧️ Ondée ! Production ×3 pendant ${d} s`;
+      this.addBuff('prod', 3, d, 'buff.shower');
+      msg = t('log.shower', { d });
     } else if (r < 0.85) {
       const gain = Math.max(this.nps() * 120, this.clickValue() * 25, 20);
       this.earn(gain);
-      msg = `💧 Flaque nourrissante : +${fmt(gain)} nutriments`;
+      msg = t('log.puddle', { gain: fmt(gain) });
     } else {
       const d = this.has('frenzy') ? 24 : 12;
-      this.addBuff('click', 15, d, '⛈️ Orage : clic ×15');
-      msg = `⛈️ Orage ! Tes clics valent ×15 pendant ${d} s`;
+      this.addBuff('click', 15, d, 'buff.storm');
+      msg = t('log.storm', { d });
     }
     this.emit('log', msg);
     return msg;
   },
-  addBuff(kind, mult, duration, label) {
-    this.s.buffs.push({ kind, mult, left: duration, total: duration, label });
+  // lk : clé de traduction de l'étiquette (v10 ; les anciennes sauvegardes ont un texte « label »)
+  addBuff(kind, mult, duration, lk) {
+    this.s.buffs.push({ kind, mult, left: duration, total: duration, lk });
     this.dirty();
   },
 
@@ -411,6 +446,8 @@ const Game = {
       herbarium: old.herbarium,
       prospect: old.prospect,
       nextGlow: old.nextGlow,
+      notes: old.notes,
+      guideDone: old.guideDone,
       sugar: this.relicIn(old, 'sapfossil') ? old.sugar * 0.25 : 0,
     });
     Object.assign(this.s.stats, old.stats, { totalEarned: 0, prestiges: old.stats.prestiges + (gain >= 1 ? 1 : 0) });
@@ -443,7 +480,7 @@ const Game = {
     const gain = target - this.s.amber;
     this.s.amber = target;
     this.dirty();
-    if (!silent) this.emit('log', `Tes spores se figent en ambre : +${gain} ambre (production ×${fmt(this.amberMult(), 2)})`);
+    if (!silent) this.emit('log', t('log.amber', { n: gain, m: fmt(this.amberMult(), 2) }));
     return gain;
   },
   relicState(r) {
@@ -456,7 +493,7 @@ const Game = {
     this.s.amberSpent += r.cost;
     this.s.relics[id] = true;
     this.dirty();
-    this.emit('log', `Relique : ${r.name}`);
+    this.emit('log', t('log.relic', { name: r.name }));
     return true;
   },
   // Automatisation (reliques Instinct et Croissance autonome), appelée une fois par seconde
@@ -484,7 +521,7 @@ const Game = {
     this.s.rival = { hp: max, max, left: RIVAL_DURATION, seed: (Math.random() * 4294967296) >>> 0 };
     this.dirty();
     this.emit('rival', this.s.rival);
-    this.emit('log', 'Une colonie rivale envahit ton territoire et te vole un quart de ta production. Clique le réseau pour la repousser !');
+    this.emit('log', t('log.rival'));
   },
   hitRival() {
     const r = this.s.rival;
@@ -494,9 +531,9 @@ const Game = {
     this.s.stats.rivals++;
     const gain = Math.max(this.nps(true) * 120, this.clickValue() * 40, 500);
     this.earn(gain);
-    this.addBuff('prod', 1.5, 90, 'Territoire conquis : production ×1,5');
+    this.addBuff('prod', 1.5, 90, 'buff.territory');
     this.emit('rivalEnd', { won: true, gain });
-    this.emit('log', `La colonie rivale est repoussée : tu digères son réseau, +${fmt(gain)} nutriments et production ×1,5 pendant 90 s`);
+    this.emit('log', t('log.rivalWon', { gain: fmt(gain) }));
   },
 
   // ---------- Poussée de carpophores (V6) ----------
@@ -551,8 +588,8 @@ const Game = {
     const found = { x, level, isNew: level === 1 };
     this.emit('specimen', found);
     if (!quiet) this.emit('log', level === 1
-      ? `Nouvelle planche pour l’herbier : <strong>${x.name}</strong> <em>(${x.latin})</em>`
-      : `Herbier : un plus beau spécimen de ${x.name} (niveau ${level})`);
+      ? t('log.newSpecimen', { name: x.name, latin: x.latin })
+      : t('log.betterSpecimen', { name: x.name, level }));
     return found;
   },
   glowUnlocked() { return herbSpecies(this.s) > 0; },
@@ -560,8 +597,40 @@ const Game = {
     this.lastActive = Date.now();
     this.s.stats.glows++;
     const found = this.findSpecimen(true);
-    if (!found) this.emit('log', 'Une lueur dans la litière… ton herbier n’a plus rien à y apprendre pour l’instant.');
+    if (!found) this.emit('log', t('log.glowEmpty'));
     return found;
+  },
+
+  // ---------- Notes de terrain et objectifs guidés (V10) ----------
+  noteSeen(id) { return !!this.s.notes[id]; },
+  // Renvoie la note si elle est encore à montrer (elle n'est marquée lue qu'une fois affichée : noteShown)
+  pendingNotes: new Set(),
+  openNote(id) {
+    const n = NOTES.find(x => x.id === id);
+    if (!n || this.s.notes[id] || this.pendingNotes.has(id)) return null;
+    this.pendingNotes.add(id);
+    return n;
+  },
+  noteShown(id) {
+    this.pendingNotes.delete(id);
+    this.s.notes[id] = true;
+  },
+  // Notes déclenchées par l'état de la partie (appelé une fois par seconde)
+  checkNotes() {
+    const out = [];
+    for (const n of NOTES) if (n.check && !this.s.notes[n.id] && !this.pendingNotes.has(n.id) && n.check(this.s, this)) out.push(this.openNote(n.id));
+    return out;
+  },
+  // Anciennes sauvegardes : les mécaniques déjà connues ne rouvrent pas leur note
+  markKnownNotes() {
+    for (const n of NOTES) if ((n.known || n.check)(this.s, this)) this.s.notes[n.id] = true;
+  },
+  // Objectif en cours (index dans GUIDE) ou -1 quand tout est fait
+  guideStep() {
+    if (this.s.guideDone) return -1;
+    const i = GUIDE.findIndex(g => g.have(this.s) < g.n);
+    if (i < 0) this.s.guideDone = true;
+    return i;
   },
 
   // ---------- Journal du réseau ----------
@@ -604,7 +673,7 @@ const Game = {
       if (this.eventsUnlocked() && Math.random() < (this.season().droughtChance || 0)) this.startDrought();
       if (this.season().id === 'automne' && this.s.stats.prestiges >= 1 && Math.random() < FLUSH_CHANCE) {
         this.emit('flush', this.flushCount());
-        this.emit('log', 'Pleine lune d’automne : tes carpophores sortent de terre. Cueille-les !');
+        this.emit('log', t('log.flush'));
       }
     }
     if (this.s.rival) {
@@ -613,7 +682,7 @@ const Game = {
         this.s.rival = null;
         this.dirty();
         this.emit('rivalEnd', { won: false });
-        this.emit('log', 'La colonie rivale se retire avec ce qu’elle t’a volé.');
+        this.emit('log', t('log.rivalLeft'));
       }
     } else if (this.rivalsUnlocked() && this.playerActive()) {
       this.s.nextRival -= dt;  // le compte à rebours n'avance que pendant que tu joues
@@ -756,11 +825,25 @@ const Game = {
         : null,
       netSeed: Number.isInteger(data.netSeed) ? data.netSeed >>> 0 : base.netSeed,
       netLog: typeof data.netLog === 'string' && /^[a-k]*$/.test(data.netLog) ? data.netLog.slice(0, NET_LOG_MAX) : '',
-      buffs: Array.isArray(data.buffs) ? data.buffs : [],
+      // effets en cours : seulement des nombres et des étiquettes connues (une sauvegarde importée peut venir de n'importe qui)
+      buffs: Array.isArray(data.buffs) ? data.buffs.filter(b => b && typeof b === 'object').map(b => ({
+        kind: b.kind === 'click' ? 'click' : 'prod', mult: Number(b.mult) || 1, left: Number(b.left) || 0, total: Number(b.total) || 1,
+        drought: b.drought === true,
+        lk: typeof b.lk === 'string' && /^buff\.\w+$/.test(b.lk) && b.lk in I18N.fr.ui ? b.lk : undefined,
+        label: typeof b.label === 'string' ? b.label.slice(0, 80) : undefined,
+      })).filter(b => b.left > 0) : [],
       sporesSpent: Number(data.sporesSpent) || 0,
+      notes: pick({}, data.notes),
+      guideDone: data.guideDone === true,
     });
+    for (const k of Object.keys(this.s.notes)) if (!NOTES.some(n => n.id === k)) delete this.s.notes[k];
     this.syncNetLog();
     this.syncAmber(true);
+    // Sauvegarde d'avant la v10 : pas de notes d'un coup pour ce qu'on connaît déjà, pas d'objectifs de débutant
+    if (!data.notes || typeof data.notes !== 'object') {
+      this.markKnownNotes();
+      if (this.s.gens.myco > 0 || this.s.stats.prestiges > 0 || this.s.stats.allTimeEarned >= 2e4) this.s.guideDone = true;
+    }
     this.dirty();
   },
   // Charge la partie. Si elle manque ou est illisible, on garde une copie brute
@@ -796,15 +879,25 @@ const Game = {
   },
   // Absence (page fermée, ou mise en veille par le navigateur, fréquent sur iPhone) :
   // gains hors-ligne au taux et au plafond habituels
+  // Renvoie le détail de l'absence pour la fenêtre « Bon retour » (v10)
   applyAway(seconds) {
-    const elapsed = Math.min(this.offlineCap(), Math.max(0, seconds));
-    const gain = this.nps(true) * elapsed * this.offlineRate();
+    const away = Math.max(0, seconds);
+    const elapsed = Math.min(this.offlineCap(), away);
+    const rate = this.offlineRate();
+    const live = this.nps(true);
+    const gain = live * elapsed * rate;
+    // part de chaque générateur (sans les effets temporaires, comme le gain lui-même)
+    const buffs = this.buffMult('prod') || 1;
+    const perGen = GENERATORS.filter(g => this.s.gens[g.id] > 0)
+      .map(g => ({ g, n: this.s.gens[g.id], gain: this.genProd(g.id) / buffs * elapsed * rate }))
+      .sort((a, b) => b.gain - a.gain);
     if (gain > 0) this.earn(gain);
-    const sugar = this.sugarRate() * elapsed * this.offlineRate();
+    const sugar = this.sugarRate() * elapsed * rate;
     if (sugar > 0) { this.s.sugar += sugar; this.s.stats.sugarEarned += sugar; }
     // Herbier : la prospection continue pendant l'absence (espèces de la saison en cours)
     const found = [];
-    let p = this.s.prospect + this.prospectRate() * elapsed * this.offlineRate();
+    const prospectFrom = this.s.prospect;
+    let p = this.s.prospect + this.prospectRate() * elapsed * rate;
     while (p >= 1 && found.length < 60) {
       const f = this.findSpecimen(false, true);
       if (!f) break;
@@ -814,7 +907,7 @@ const Game = {
     this.s.prospect = Math.min(1, p);
     this.s.buffs = this.s.buffs.filter(b => b.left - elapsed > 0).map(b => ({ ...b, left: b.left - elapsed }));
     if (this.s.rival && elapsed > 5) { this.s.rival = null; this.dirty(); }  // elle repart pendant ton absence
-    return { elapsed, gain, sugar, found };
+    return { elapsed, away, rate, live, gain, perGen, sugar, found, prospectFrom, prospectTo: this.s.prospect };
   },
   exportSave() {
     this.s.lastSave = Date.now();
