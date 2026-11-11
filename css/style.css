@@ -722,11 +722,18 @@ html.reduce-motion .note-card, html.reduce-motion .guide-bar i, html.reduce-moti
   font: italic calc(13px * var(--fs)) var(--serif); color: var(--ink); text-shadow: 0 0 6px rgba(0, 0, 0, .9); }
 .biome-lock .progress { max-width: 220px; margin: 6px auto 3px; }
 .biome-lock .progress div { height: 100%; background: var(--accent2); }
-.biome-panel { margin: 4px 5px 0; }
-.biome-panel .talents-head { margin-top: 10px; }
+.biome-panel { margin: 2px 0 0; }
+.biome-panel .talents-head { margin-top: 14px; }
+.biome-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 2px 6px; border-bottom: 1px solid var(--rule); margin-bottom: 6px; }
+.biome-title { font: 600 calc(17px * var(--fs)) var(--serif); color: var(--ink); }
+.biome-title span { font: italic calc(12px * var(--fs)) var(--serif); color: var(--accent2); margin-right: 6px; }
+.link-btn { background: none; border: none; padding: 4px 2px; min-height: 32px; color: var(--accent); text-transform: none; letter-spacing: normal;
+  font: italic calc(12px * var(--fs)) var(--serif); cursor: pointer; }
+.link-btn:hover { color: var(--ink); background: none; }
+#bio-gens { margin-top: 6px; }
+#gen-list.hidden, .biome-panel.hidden { display: none; }
 .biome-panel > p { margin: 2px 0 0; }
 #bio-rate { color: var(--accent2); }
-.left.biome-on .log { display: none; }
 .link-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; margin-top: 6px; }
 .link { display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; padding: 6px 8px; min-height: 44px;
   text-transform: none; letter-spacing: normal; font-size: calc(11.5px * var(--fs)); }
@@ -737,11 +744,6 @@ html.reduce-motion .note-card, html.reduce-motion .guide-bar i, html.reduce-moti
 .link .llvl { color: var(--accent2); }
 .link .lcost { color: var(--accent); }
 .link:disabled { opacity: .6; cursor: default; }
-/* Ordinateur : le panneau du biome défile sous la planche au lieu de l'écraser */
-@media (min-width: 821px) and (min-height: 561px) {
-  .biome-panel { flex: 0 1 auto; min-height: 90px; max-height: 40vh; overflow-y: auto; }
-  .left.biome-on .network-wrap { min-height: 220px; }
-}
 /* Variantes rares de l'herbier : trois petites vignettes, grisées tant qu'elles ne sont pas trouvées */
 .specimen .variants { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: middle; }
 .specimen .variant { width: 20px; height: 20px; border: 1px solid var(--rule); opacity: .45; }

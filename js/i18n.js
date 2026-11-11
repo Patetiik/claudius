@@ -523,9 +523,10 @@ I18N.fr = {
     'bio.caption': '<span>Pl. {plate}</span> — {caption}',
     'bio.lockedCaption': '<span>Pl. {plate}</span> — {name}, à coloniser',
     'bio.lockedText': 'À atteindre : {cond}.',
-    'bio.lockedProgress': '{a} / {b}',
+    'bio.lockedProgress': '{a} sur {b} ({p})',
     'bio.res': '<strong>{n}</strong> {res}', 'bio.rate': '+{v}/s',
     'bio.hint': 'Touche la planche pour récolter. Elle pousse aussi seule, même jeu fermé.',
+    'bio.title': '<span>Pl. {plate}</span> {name}', 'bio.back': '← Revenir à la forêt',
     'bio.gens': 'Générateurs', 'bio.links': 'Liens racinaires',
     'bio.linksIntro': 'Bonus permanents qui relient ce biome à la forêt, payés en {res}. Chaque niveau coûte un peu plus, sans limite.',
     'bio.lvl': 'niv. {n}', 'bio.cost': '{n} {res}', 'bio.max': 'au maximum',
@@ -749,6 +750,13 @@ I18N.en = {
     },
     // v10 : notes de version en anglais (le français est dans js/changelog.js), par numéro de version
     changelog: {
+      '12.1': { title: 'Clearer plates',
+        summary: 'Biomes now show in place of the forest in the Network tab, and their thresholds are written out in words.',
+        changed: [
+          'When you look at a biome, its generators and root links replace the forest’s in the Network tab, on the right. No more small area to scroll under the plate. “← Back to the forest” returns to Pl. I.',
+          'Biome generators look like the forest’s, with their description and production.',
+          'Biome unlock thresholds are written out in words (“6 billion” instead of “6.00 B”), with the share reached.',
+        ] },
       '12.0': { title: 'New plates',
         summary: 'Three biomes to colonise beside the forest, endless trials, rare variants in the herbarium and a collection prestige. Still without resetting anything.',
         added: [
@@ -1207,9 +1215,10 @@ I18N.en = {
     'bio.caption': '<span>Pl. {plate}</span> — {caption}',
     'bio.lockedCaption': '<span>Pl. {plate}</span> — {name}, to colonise',
     'bio.lockedText': 'To reach: {cond}.',
-    'bio.lockedProgress': '{a} / {b}',
+    'bio.lockedProgress': '{a} of {b} ({p})',
     'bio.res': '<strong>{n}</strong> {res}', 'bio.rate': '+{v}/s',
     'bio.hint': 'Tap the plate to harvest. It also grows on its own, even with the game closed.',
+    'bio.title': '<span>Pl. {plate}</span> {name}', 'bio.back': '← Back to the forest',
     'bio.gens': 'Generators', 'bio.links': 'Root links',
     'bio.linksIntro': 'Permanent bonuses tying this biome to the forest, paid in {res}. Each level costs a little more, with no limit.',
     'bio.lvl': 'lv. {n}', 'bio.cost': '{n} {res}', 'bio.max': 'maxed',

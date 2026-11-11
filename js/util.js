@@ -79,6 +79,27 @@ function fmt(n, decimals) {
   return fmtDec(scaled, scaled < 10 ? 2 : scaled < 100 ? 1 : 0) + ' ' + suf[tier];
 }
 
+// Nombre rond écrit en toutes lettres pour les seuils (« 6 milliards », « 25 billion ») : pas de « Md » ambigu (v12.1)
+const NUM_WORDS = {
+  fr: [null, null, ['million', 'millions'], ['milliard', 'milliards'], ['billion', 'billions'], ['billiard', 'billiards'], ['trillion', 'trillions']],
+  en: [null, null, ['million', 'million'], ['billion', 'billion'], ['trillion', 'trillion'], ['quadrillion', 'quadrillion'], ['quintillion', 'quintillion']],
+};
+function fmtWords(n) {
+  const words = NUM_WORDS[isEn() ? 'en' : 'fr'];
+  const tier = n > 0 ? Math.floor(Math.log10(n) / 3) : 0;
+  if (tier < 2 || !words[tier] || Settings.v.numbers === 'sci') return fmt(n);
+  const scaled = Number((n / Math.pow(1000, tier)).toPrecision(3));
+  return fmtDec(scaled) + ' ' + words[tier][scaled >= 2 ? 1 : 0];
+}
+
+// Part atteinte d'un objectif, arrondie vers le bas (jamais « 100 % » avant la fin)
+function fmtPct(p) {
+  const v = Math.max(0, Math.min(1, p)) * 100;
+  if (v > 0 && v < 0.1) return '< ' + fmtDec(0.1, 1) + pctSign();
+  if (v === 0) return '0' + pctSign();
+  return (v < 10 ? fmtDec(Math.floor(v * 10) / 10, 1) : fmtDec(Math.floor(v), 0)) + pctSign();
+}
+
 function fmtTime(sec) {
   sec = Math.floor(sec);
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;

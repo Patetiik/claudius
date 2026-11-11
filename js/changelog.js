@@ -4,6 +4,15 @@
 // (pas de jargon technique), et la traduire dans le fichier de traduction si besoin.
 const CHANGELOG = [
   {
+    version: '12.1', date: '2026-11-11', title: 'Des planches plus claires',
+    summary: 'Les biomes s’affichent à la place de la forêt dans l’onglet Réseau, et leurs seuils s’écrivent en toutes lettres.',
+    changed: [
+      'Quand tu regardes un biome, ses générateurs et ses liens racinaires remplacent ceux de la forêt dans l’onglet Réseau, à droite. Plus de petite zone à faire défiler sous la planche. « ← Revenir à la forêt » ramène à la Pl. I.',
+      'Les générateurs des biomes ont la même présentation que ceux de la forêt, avec leur description et leur production.',
+      'Les seuils de déblocage des biomes s’écrivent en toutes lettres (« 6 milliards » au lieu de « 6,00 Md »), avec le pourcentage atteint.',
+    ],
+  },
+  {
     version: '12.0', date: '2026-11-11', title: 'Nouvelles planches',
     summary: 'Trois biomes à coloniser à côté de la forêt, des épreuves sans fin, des variantes rares dans l’herbier et un prestige de collection. Toujours sans rien remettre à zéro.',
     added: [

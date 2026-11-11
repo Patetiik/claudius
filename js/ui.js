@@ -1132,6 +1132,7 @@ const UI = {
       this.floater(e.clientX - r.left, e.clientY - r.top, '+' + fmt(v));
       this.update();
     });
+    $('bio-back').addEventListener('click', () => this.selectPlate(null));
     this.linkRows = {};
     LINKS.forEach(l => {
       const b = el('button', 'link', `<span class="lname"></span><span class="ldesc"></span><span class="lrow"><span class="llvl"></span><span class="lcost"></span></span>`);
@@ -1147,6 +1148,8 @@ const UI = {
     this.biomeKey = null;
     this.biomeSeen = this.biomeSeen || {};
     if (def) this.biomeSeen[def.id] = true;
+    // les générateurs du biome remplacent ceux de la forêt dans l'onglet Réseau (v12.1)
+    if (def && Game.biomeOpen(def)) document.querySelector('.tabs button[data-tab="gens"]').click();
     $('network').classList.toggle('hidden', !!def);
     $('biome-canvas').classList.toggle('hidden', !def);
     $('main-caption').classList.toggle('hidden', !!def);
@@ -1166,7 +1169,7 @@ const UI = {
   },
   biomeCond(b) {
     const need = b.unlock.need, have = Math.min(need, b.unlock.have(Game.s));
-    return { text: b.unlockText.replace('{n}', fmt(need)), have, need, pct: Math.min(1, have / need) };
+    return { text: b.unlockText.replace('{n}', fmtWords(need)), have, need, pct: Math.min(1, have / need) };
   },
   updateBiomes() {
     const teased = Game.biomesTeased();
@@ -1187,7 +1190,9 @@ const UI = {
     }
     for (const b of BIOMES) this.plateTabs[b.id].btn.classList.toggle('fresh', Game.biomeOpen(b) && !(this.biomeSeen && this.biomeSeen[b.id]) && this.biomeSel !== b.id);
     const def = this.biomeSel && BIOMES.find(b => b.id === this.biomeSel);
-    $('biome-panel').classList.toggle('hidden', !def || !Game.biomeOpen(def));
+    const bioOn = !!def && Game.biomeOpen(def);
+    $('biome-panel').classList.toggle('hidden', !bioOn);
+    $('gen-list').classList.toggle('hidden', bioOn);
     if (!def) { $('biome-lock').classList.add('hidden'); return; }
     const p = Game.plate(def.id);
     $('biome-canvas').classList.toggle('greyed', !p);
@@ -1196,7 +1201,7 @@ const UI = {
       const c = this.biomeCond(def);
       $('biome-caption').innerHTML = t('bio.lockedCaption', { plate: def.plate, name: def.name });
       $('biome-lock').innerHTML = `<div>${t('bio.lockedText', { cond: c.text })}</div>
-        <div class="progress"><div style="width:${c.pct * 100}%"></div></div><div class="small">${t('bio.lockedProgress', { a: fmt(c.have), b: fmt(c.need) })}</div>`;
+        <div class="progress"><div style="width:${c.pct * 100}%"></div></div><div class="small">${t('bio.lockedProgress', { a: fmtWords(c.have), b: fmtWords(c.need), p: fmtPct(c.pct) })}</div>`;
       return;
     }
     if (this.biomeView.plateId !== def.id) { PlateView.setBiome(this.biomeView, def); this.biomeView.plateId = def.id; this.biomeView.rebuild(p); }
@@ -1205,15 +1210,22 @@ const UI = {
       this.biomeKey = key;
       $('biome-caption').innerHTML = t('bio.caption', { plate: def.plate, caption: def.caption });
       $('bio-hint').textContent = t('bio.hint');
+      $('bio-title').innerHTML = t('bio.title', { plate: def.plate, name: def.name });
+      $('bio-back').textContent = t('bio.back');
       $('bio-links-title').textContent = t('bio.links');
       $('bio-links-intro').textContent = t('bio.linksIntro', { res: def.resName });
       this.bioRows = {};
       $('bio-gens').replaceChildren(...def.gens.map(g => {
-        const row = el('button', 'pgen', `<span class="icon">${g.icon}</span><span class="pname"></span><span class="powned"></span><span class="pcost"></span>`);
-        row.type = 'button';
-        row.title = g.desc;
-        row.addEventListener('click', () => { if (Game.buyPlateGen(def.id, g.id, this.buyMode)) this.update(); });
-        this.bioRows[g.id] = { row, name: row.querySelector('.pname'), owned: row.querySelector('.powned'), cost: row.querySelector('.pcost'), icon: row.querySelector('.icon') };
+        const row = el('div', 'gen', `<div class="icon">${g.icon}</div>
+          <div><div class="name"></div><div class="desc"></div><div class="meta"></div></div>
+          <div class="right-col"><div class="owned">0</div><div class="cost"></div></div>`);
+        row.setAttribute('role', 'button');
+        row.tabIndex = 0;
+        const buy = () => { if (!row.classList.contains('locked') && Game.buyPlateGen(def.id, g.id, this.buyMode)) this.update(); };
+        row.addEventListener('click', buy);
+        row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); buy(); } });
+        this.bioRows[g.id] = { row, name: row.querySelector('.name'), desc: row.querySelector('.desc'), meta: row.querySelector('.meta'),
+          owned: row.querySelector('.owned'), cost: row.querySelector('.cost'), icon: row.querySelector('.icon') };
         return row;
       }));
       for (const l of LINKS) {
@@ -1234,9 +1246,11 @@ const UI = {
       if (!vis) {
         mystery = true;
         r.row.classList.add('locked');
-        r.row.disabled = true;
+        r.row.classList.remove('affordable', 'too-expensive');
         r.icon.textContent = '❔';
         r.name.textContent = '???';
+        r.desc.textContent = '';
+        r.meta.textContent = '';
         r.owned.textContent = '';
         r.cost.textContent = t('plate.mystery', { n: fmt(g.baseCost * 0.4) });
         return;
@@ -1244,12 +1258,17 @@ const UI = {
       r.row.classList.remove('locked');
       r.icon.textContent = g.icon;
       r.name.textContent = g.name;
+      r.desc.textContent = g.desc;
       const n = this.buyMode === 'max' ? Math.max(1, Game.plateMaxAffordable(def, g.id)) : this.buyMode;
       const cost = Game.plateCost(def, g.id, n);
       const can = cost <= p.nutrients;
-      r.row.disabled = !can;
       r.row.classList.toggle('affordable', can);
-      r.owned.textContent = p.gens[g.id] || 0;
+      r.row.classList.toggle('too-expensive', !can);
+      const own = p.gens[g.id] || 0, unit = Game.plateUnitProd(def, g.id);
+      r.meta.textContent = own
+        ? t('gens.total', { v: fmt(unit, unit < 10 ? 1 : 0), t: fmt(unit * own) })
+        : t('gens.each', { v: fmt(unit, unit < 10 ? 1 : 0) });
+      r.owned.textContent = own;
       r.cost.textContent = `${n > 1 ? '×' + n + ' · ' : ''}${fmt(cost)}`;
     });
     for (const l of LINKS) {
