@@ -2,6 +2,9 @@
 CLAUDE.md
 TEST-IPHONE.md
 .claude/
+.mcp.json
+.playwright-mcp/
+docs/
 demo.html
 .env
 .env.*
