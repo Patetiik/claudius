@@ -206,12 +206,13 @@ const HELP = {
   },
   prospect() {
     const r = Game.prospectRate(), findable = Game.findableSpecimens().length > 0;
-    const speed = 1 + 0.25 * Math.log10(1 + Game.nps(true));
+    const speed = Game.prospectSpeed();
     return {
       title: t('help.prospectTitle'),
       html: tipP(t('help.prospectBody')) + tipRows([
         tipRow(t('help.every'), fmtTime(1 / r)),
         tipRow(t('help.speed'), t('help.speedVal', { m: fmtDec(speed, 2), loupe: Game.relic('loupe') ? t('help.loupe') : '' })),
+        ...(Game.linkMult('prospect') > 1 ? [tipRow(t('help.biomeLinks'), tipMult(Game.linkMult('prospect')))] : []),
         tipRow(t('help.nextFind'), findable ? fmtTime(Math.max(0, (1 - Game.s.prospect) / r)) : t('help.nothing')),
       ]),
     };
@@ -228,6 +229,19 @@ const HELP = {
     rows.push(tipRow(t('help.left'), fmtTime((1 - Game.seasonProgress()) * SEASON_DURATION)));
     rows.push(tipRow(t('help.then'), seasonLabel(SEASONS[(idx + 1) % SEASONS.length])));
     return { title: seasonLabel(se), html: tipP(t('help.seasonBody')) + tipRows(rows) };
+  },
+  // v12 : ressource d'un biome (tourbe, givre, spores rares) : d'où elle vient, multiplicateur par multiplicateur
+  biome() {
+    const def = UI.biomeSel && Game.plateDef(UI.biomeSel), p = def && Game.plate(def.id);
+    if (!p) return null;
+    const src = def.gens.filter(g => p.gens[g.id]).map(g => tipRow(t('help.genLine', { name: g.name, n: p.gens[g.id] }), rate(Game.plateUnitProd(def, g.id) * p.gens[g.id])));
+    const base = def.gens.reduce((a, g) => a + g.baseProd * (p.gens[g.id] || 0), 0);
+    const rows = [tipRow(t('help.base'), rate(base)), ...partRows(Game.biomeParts(def)), tipRow(t('help.total'), rate(Game.plateNps(def)), 'total')];
+    return {
+      title: def.resName.replace(/^./, c => c.toUpperCase()),
+      html: tipP(t('help.biomeBody')) + tipRows([tipRow(t('help.biomeTotal'), fmt(p.earned))])
+        + tipH(t('help.sources')) + tipRows(src) + tipH(t('help.mults')) + tipRows(rows),
+    };
   },
   buff(a) {
     const b = Game.s.buffs[Number(a.dataset.buff)];

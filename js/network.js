@@ -52,8 +52,9 @@ const Network = {
   rebuild(state) {
     this.reset(state.netSeed);
     this.rival = null;
+    const list = this.genList || GENERATORS;   // v12 : une planche de biome a ses 4 générateurs à elle
     for (let i = 0; i < state.netLog.length; i++) {
-      const g = GENERATORS[state.netLog.charCodeAt(i) - 97];
+      const g = list[state.netLog.charCodeAt(i) - 97];
       if (g) this.addBranch(g, true);
     }
     this.view.scale = this.fitScale();
@@ -82,7 +83,7 @@ const Network = {
   // Ajoute une branche ; renvoie true si elle a été dessinée (le journal reste ainsi aligné)
   addBranch(gen, instant) {
     if (this.nodes.length >= MAX_BRANCHES) return false;
-    const tier = GENERATORS.indexOf(gen);
+    const tier = gen.tier != null ? gen.tier : GENERATORS.indexOf(gen);
     let parentIdx;
     const tips = [];
     for (let i = 1; i < this.nodes.length; i++) if (this.nodes[i].children === 0) tips.push(i);
@@ -158,10 +159,11 @@ const Network = {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, w, h);
     const rng = seededRng(7), sy = this.surfaceY();
+    const pal = this.soilPal || this.SOIL;   // v12 : chaque biome a son sol
     const g = c.createLinearGradient(0, sy, 0, h);
-    g.addColorStop(0, '#22180f'); g.addColorStop(0.5, '#18110b'); g.addColorStop(1, '#100b08');
+    g.addColorStop(0, pal.top); g.addColorStop(0.5, pal.mid); g.addColorStop(1, pal.bottom);
     c.fillStyle = g; c.fillRect(0, sy, w, h - sy);
-    c.strokeStyle = 'rgba(120,90,60,0.06)'; c.lineWidth = 1;
+    c.strokeStyle = pal.strata; c.lineWidth = 1;
     for (let k = 0; k < 7; k++) {
       const y0 = sy + (h - sy) * (0.12 + k * 0.13);
       c.beginPath(); c.moveTo(0, y0);
@@ -171,10 +173,12 @@ const Network = {
     const count = Math.floor(w * (h - sy) / 900);
     for (let k = 0; k < count; k++) {
       const x = rng() * w, y = sy + 6 + rng() * (h - sy - 6), r = 0.4 + rng() * rng() * 2.6;
-      c.fillStyle = rng() < 0.5 ? 'rgba(160,130,95,0.10)' : 'rgba(0,0,0,0.25)';
+      c.fillStyle = rng() < 0.5 ? pal.pebble : 'rgba(0,0,0,0.25)';
       c.beginPath(); c.ellipse(x, y, r * 1.3, r, rng() * 3, 0, Math.PI * 2); c.fill();
     }
   },
+
+  SOIL: { top: '#22180f', mid: '#18110b', bottom: '#100b08', strata: 'rgba(120,90,60,0.06)', pebble: 'rgba(160,130,95,0.10)' },
 
   // Réseau pré-rendu sur un calque : redessiné seulement si une branche pousse ou si le zoom change
   renderLayer() {
@@ -464,6 +468,7 @@ const Network = {
   },
 
   drawSurface(state, season, env) {
+    if (this.biome) { this.drawBiomeSurface(state, env); return; }  // v12 : planches de biome
     const { ctx, w } = this;
     const sy = this.surfaceY();
     const t = this.clock();
@@ -783,10 +788,251 @@ const PlateView = {
     v.init(canvas);
     return v;
   },
-  // Le dessin de surface lit state.gens : on lui passe ceux de la planche
-  fakeState(p) {
+  // Le dessin de surface lit state.gens : on lui passe ceux de la planche (list : générateurs d'un biome, v12)
+  fakeState(p, list) {
     const gens = {};
-    for (const g of GENERATORS) gens[g.id] = (p && p.gens[g.id]) || 0;
+    for (const g of (list || GENERATORS)) gens[g.id] = (p && p.gens[g.id]) || 0;
     return { gens, legacy: null };
   },
+  // v12 : la vue devient celle d'un biome (ou redevient une planche d'épreuve avec def = null)
+  setBiome(v, def) {
+    if (v.biome === def) return;
+    v.biome = def;
+    v.genList = def ? def.gens : null;
+    v.soilPal = def ? BIOME_SOIL[def.id] : null;
+    v.renderSoil();
+    v.layerDirty = true;
+  },
 };
+
+// ---------- Surfaces des biomes (V12) ----------
+// Même gravure que la forêt : ciel de nuit, horizon, et ce que les générateurs du biome font pousser en surface.
+const BIOME_SOIL = {
+  tourbiere: { top: '#1f150c', mid: '#170f08', bottom: '#0e0905', strata: 'rgba(150,100,60,0.09)', pebble: 'rgba(120,150,80,0.10)' },
+  alpine: { top: '#1c1e23', mid: '#15171b', bottom: '#0e0f12', strata: 'rgba(170,185,210,0.07)', pebble: 'rgba(200,210,225,0.12)' },
+  tropical: { top: '#26150d', mid: '#1b0f09', bottom: '#110906', strata: 'rgba(190,110,60,0.08)', pebble: 'rgba(210,140,70,0.12)' },
+};
+Object.assign(Network, {
+  drawBiomeSurface(state, env) {
+    const { ctx, w } = this, sy = this.surfaceY(), t = this.clock(), g = state.gens, id = this.biome.id;
+    const sky = ctx.createLinearGradient(0, 0, 0, sy);
+    const [a, b] = { tourbiere: ['#10161a', '#2a3226'], alpine: ['#0a1020', '#283954'], tropical: ['#0b1613', '#22402f'] }[id];
+    sky.addColorStop(0, a); sky.addColorStop(1, b);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, w, sy);
+    // lune, plus pâle et plus haute en montagne
+    const ax = w * (id === 'alpine' ? 0.18 : 0.84), ay = sy * (id === 'alpine' ? 0.22 : 0.3);
+    const glow = ctx.createRadialGradient(ax, ay, 0, ax, ay, sy * 0.45);
+    glow.addColorStop(0, 'rgba(240,236,220,0.7)'); glow.addColorStop(0.18, 'rgba(240,236,220,0.22)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glow; ctx.fillRect(ax - sy, 0, sy * 2, sy);
+    if (id === 'tourbiere') this.drawBog(g, sy, t);
+    else if (id === 'alpine') this.drawAlpine(g, sy, t);
+    else this.drawTropical(g, sy, t);
+  },
+  // Sol : un trait d'horizon et une couche qui s'estompe vers le réseau
+  drawGround(sy, top, line) {
+    const ctx = this.ctx, w = this.w;
+    const humus = ctx.createLinearGradient(0, sy, 0, sy + 22);
+    humus.addColorStop(0, top); humus.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = humus; ctx.fillRect(0, sy, w, 22);
+    ctx.fillStyle = line; ctx.fillRect(0, sy - 3, w, 5);
+  },
+  // Tourbière : flaques où se reflète la lune, buttes de sphaigne, linaigrettes, bruyère, rossolis, brume
+  drawBog(g, sy, t) {
+    const ctx = this.ctx, w = this.w;
+    ctx.fillStyle = 'rgba(8,10,8,0.4)';     // bouleaux lointains, clairsemés
+    for (let i = 0; i < 9; i++) {
+      const x = w * ((i * 0.137 + 0.05) % 1), hh = sy * (0.18 + ((i * 7) % 4) * 0.05);
+      ctx.fillRect(x, sy - hh, 1.6, hh);
+      ctx.beginPath(); ctx.ellipse(x + 0.8, sy - hh, 5, 8, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    this.drawGround(sy, 'rgba(60,40,22,0.8)', '#3d3a22');
+    // flaques d'eau noire
+    for (const [fx, fw] of [[0.2, 0.16], [0.63, 0.12], [0.9, 0.08]]) {
+      const x = w * fx, rw = w * fw / 2;
+      ctx.fillStyle = '#0c1214';
+      ctx.beginPath(); ctx.ellipse(x, sy + 1, rw, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(230,230,210,0.25)';
+      ctx.fillRect(x - rw * 0.25 + Math.sin(t * 0.6 + fx * 9) * 2, sy, rw * 0.5, 0.8);
+    }
+    // buttes de sphaigne (tapis) et buttes millénaires (plus hautes)
+    const mounds = Math.min(3 + Math.floor((g.sphaigne || 0) / 4), 14);
+    for (let i = 0; i < mounds; i++) {
+      const x = w * ((i * 0.293 + 0.07) % 1), r = 7 + (i % 3) * 3;
+      ctx.fillStyle = i % 2 ? '#6f7a3a' : '#8a5a3a';
+      ctx.beginPath(); ctx.ellipse(x, sy, r, r * 0.45, 0, Math.PI, 0); ctx.fill();
+    }
+    const old = Math.min(g.butte || 0, 4);
+    for (let i = 0; i < old; i++) {
+      const x = w * [0.42, 0.76, 0.1, 0.55][i], r = 20 + i * 2;
+      ctx.fillStyle = '#5b4a2c';
+      ctx.beginPath(); ctx.ellipse(x, sy, r, r * 0.55, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = 'rgba(150,170,90,0.5)';
+      ctx.beginPath(); ctx.ellipse(x, sy - r * 0.45, r * 0.7, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // bruyère : petites touffes violettes
+    const heath = Math.min(g.ericoide || 0, 16);
+    for (let i = 0; i < heath; i++) {
+      const x = w * ((i * 0.381 + 0.15) % 1);
+      ctx.strokeStyle = '#4c3a3a'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, sy); ctx.lineTo(x - 2, sy - 5); ctx.moveTo(x, sy); ctx.lineTo(x + 2, sy - 6); ctx.stroke();
+      ctx.fillStyle = '#b98bb0';
+      for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(x - 2 + k * 2, sy - 5 - (k % 2), 1.1, 0, Math.PI * 2); ctx.fill(); }
+    }
+    // rossolis : rosettes rouges, gouttes de glu qui brillent
+    const dew = Math.min(g.rossolis || 0, 10);
+    for (let i = 0; i < dew; i++) {
+      const x = w * ((i * 0.517 + 0.31) % 1);
+      ctx.fillStyle = '#b24a38';
+      for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.ellipse(x + k * 1.6, sy - 1.2, 1.1, 2, k * 0.4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = 'rgba(255,240,200,' + (0.5 + 0.4 * Math.sin(t * 2 + i)).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(x, sy - 3.6, 0.8, 0, Math.PI * 2); ctx.fill();
+    }
+    // linaigrettes : toujours quelques-unes, des pompons blancs qui se balancent
+    const cotton = 6 + Math.min(Math.floor((g.sphaigne || 0) / 3), 14);
+    for (let i = 0; i < cotton; i++) {
+      const x = w * ((i * 0.618 + 0.02) % 1), hh = 9 + (i % 4) * 2.5, sw = Math.sin(t * 1.2 + i) * 1.4;
+      ctx.strokeStyle = '#6d6a46'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(x, sy - 1); ctx.lineTo(x + sw, sy - hh); ctx.stroke();
+      ctx.fillStyle = 'rgba(245,242,230,0.9)';
+      ctx.beginPath(); ctx.arc(x + sw, sy - hh - 1.5, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    // brume basse qui dérive
+    ctx.save();
+    ctx.globalAlpha = 0.16;
+    for (let k = 0; k < 2; k++) {
+      const mx = ((t * (6 + k * 3) + k * w * 0.5) % (w * 1.6)) - w * 0.3;
+      const m = ctx.createRadialGradient(mx, sy - 6, 0, mx, sy - 6, w * 0.4);
+      m.addColorStop(0, '#dfe6da'); m.addColorStop(1, 'rgba(223,230,218,0)');
+      ctx.fillStyle = m; ctx.fillRect(mx - w * 0.4, sy - 30, w * 0.8, 34);
+    }
+    ctx.restore();
+  },
+  // Forêt alpine : étoiles, sommets enneigés, pins arolles, rhododendrons, blocs de moraine, neige qui tombe
+  drawAlpine(g, sy, t) {
+    const ctx = this.ctx, w = this.w;
+    const rng = seededRng(41);
+    for (let i = 0; i < 40; i++) {
+      const x = rng() * w, y = rng() * sy * 0.6;
+      ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 0.8 + i * 1.7));
+      ctx.fillStyle = '#e8eefc'; ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+    const ridge = (k, amp, col) => {
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(0, sy);
+      // sommets en dents de scie (onde triangulaire), avec un peu de relief
+      for (let x = 0; x <= w; x += 6) {
+        const u = (x / (w * 0.22) + k) % 2, tri = 1 - Math.abs(u - 1);
+        ctx.lineTo(x, sy - sy * amp * (0.35 + 0.55 * tri * (0.75 + 0.25 * Math.sin(x * 0.05 + k * 3)) + 0.04 * Math.sin(x * 0.31)));
+      }
+      ctx.lineTo(w, sy); ctx.fill();
+    };
+    ridge(1.3, 0.7, '#1b2538');
+    // neiges éternelles sur la crête du fond
+    ctx.save(); ctx.globalAlpha = 0.35; ridge(1.3, 0.7, 'rgba(220,232,250,0.5)'); ctx.restore();
+    ridge(4.1, 0.42, '#141c2b');
+    this.drawGround(sy, 'rgba(180,200,225,0.22)', '#d9e4f0');
+    // congères (hyphes de névé)
+    const drifts = 3 + Math.min(Math.floor((g.neve || 0) / 4), 10);
+    ctx.fillStyle = '#e8f0f8';
+    for (let i = 0; i < drifts; i++) {
+      const x = w * ((i * 0.293 + 0.11) % 1), r = 8 + (i % 3) * 4;
+      ctx.beginPath(); ctx.ellipse(x, sy - 1, r, r * 0.3, 0, Math.PI, 0); ctx.fill();
+    }
+    // blocs de moraine
+    const rocks = Math.min(g.moraine || 0, 6);
+    for (let i = 0; i < rocks; i++) {
+      const x = w * [0.36, 0.7, 0.14, 0.86, 0.5, 0.25][i], r = 7 + (i % 2) * 3;
+      ctx.fillStyle = '#6c7584';
+      ctx.beginPath(); ctx.moveTo(x - r, sy); ctx.lineTo(x - r * 0.6, sy - r * 0.9); ctx.lineTo(x + r * 0.3, sy - r); ctx.lineTo(x + r, sy); ctx.fill();
+      ctx.fillStyle = '#eef3fa';
+      ctx.beginPath(); ctx.moveTo(x - r * 0.6, sy - r * 0.9); ctx.lineTo(x + r * 0.3, sy - r); ctx.lineTo(x + r * 0.1, sy - r * 0.75); ctx.fill();
+    }
+    // rhododendrons : buissons sombres piqués de rose
+    const rho = Math.min(g.rhodo || 0, 12);
+    for (let i = 0; i < rho; i++) {
+      const x = w * ((i * 0.447 + 0.2) % 1);
+      ctx.fillStyle = '#2d3d2e';
+      ctx.beginPath(); ctx.ellipse(x, sy - 2, 5, 3.5, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#e58aa8';
+      for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(x - 3 + k * 3, sy - 4 - (k % 2), 1, 0, Math.PI * 2); ctx.fill(); }
+    }
+    // pins arolles : au moins trois en décor, les autres poussent avec les achats
+    const pines = Math.max(3, Math.min(g.arolle || 0, 9));
+    for (let i = 0; i < pines; i++) {
+      const x = w * [0.08, 0.3, 0.58, 0.8, 0.45, 0.19, 0.69, 0.93, 0.02][i], hh = sy * (0.42 + (i % 3) * 0.08);
+      const own = i < (g.arolle || 0);
+      ctx.fillStyle = own ? '#24402f' : 'rgba(20,30,28,0.8)';
+      for (let k = 0; k < 4; k++) {
+        const y = sy - hh * (0.25 + k * 0.22), half = hh * (0.28 - k * 0.055);
+        ctx.beginPath(); ctx.moveTo(x - half, y + hh * 0.2); ctx.lineTo(x, y - hh * 0.12); ctx.lineTo(x + half, y + hh * 0.2); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(235,242,250,0.75)';
+      ctx.beginPath(); ctx.moveTo(x - 3, sy - hh * 0.86); ctx.lineTo(x, sy - hh * 0.98); ctx.lineTo(x + 3, sy - hh * 0.86); ctx.fill();
+      ctx.fillStyle = '#3a2c20'; ctx.fillRect(x - 1, sy - hh * 0.2, 2, hh * 0.2);
+    }
+    this.drawWeather('hiver', false, sy, t);
+  },
+  // Bois mort tropical : un kapokier abattu en travers de la planche, lianes, figuier étrangleur, fourmis, lucioles
+  drawTropical(g, sy, t) {
+    const ctx = this.ctx, w = this.w;
+    ctx.fillStyle = 'rgba(6,14,10,0.55)';   // canopée lointaine
+    ctx.beginPath(); ctx.moveTo(0, sy);
+    for (let x = 0; x <= w; x += 10) ctx.lineTo(x, sy - sy * (0.45 + 0.12 * Math.sin(x * 0.03) + 0.08 * Math.sin(x * 0.11 + 2)));
+    ctx.lineTo(w, sy); ctx.fill();
+    this.drawGround(sy, 'rgba(70,40,22,0.8)', '#3a2a18');
+    // le tronc abattu (toujours là : c'est le bois mort qu'on colonise), plus moussu avec les kapokiers
+    const moss = Math.min(g.kapok || 0, 6);
+    const tx0 = w * 0.08, tx1 = w * 0.74, ty = sy - 7, th = 11;
+    const bark = ctx.createLinearGradient(0, ty - th, 0, ty + th);
+    bark.addColorStop(0, '#6a4a32'); bark.addColorStop(0.5, '#4a3222'); bark.addColorStop(1, '#2c1d14');
+    ctx.fillStyle = bark;
+    ctx.beginPath(); ctx.moveTo(tx0, ty - th * 0.8); ctx.lineTo(tx1, ty - th); ctx.lineTo(tx1, ty + th * 0.6); ctx.lineTo(tx0, ty + th * 0.5); ctx.fill();
+    ctx.fillStyle = '#5a3c28';
+    ctx.beginPath(); ctx.ellipse(tx1, ty - th * 0.2, 4, th * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,18,10,0.6)'; ctx.lineWidth = 0.8;
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.ellipse(tx1, ty - th * 0.2, 1 + k, th * 0.2 * (k + 1), 0, 0, Math.PI * 2); ctx.stroke(); }
+    for (let i = 0; i < 3 + moss * 2; i++) {
+      const x = tx0 + (tx1 - tx0) * ((i * 0.37 + 0.1) % 1);
+      ctx.fillStyle = i % 2 ? '#5f8a3a' : '#7aa64a';
+      ctx.beginPath(); ctx.ellipse(x, ty - th * 0.85, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // souches moussues
+    const stumps = Math.min(1 + Math.floor((g.souche || 0) / 5), 6);
+    for (let i = 0; i < stumps; i++) {
+      const x = w * [0.86, 0.95, 0.8, 0.04, 0.9, 0.12][i], hh = 10 + (i % 2) * 5;
+      ctx.fillStyle = '#4a3222'; ctx.fillRect(x - 4, sy - hh, 8, hh);
+      ctx.fillStyle = '#c8955e'; ctx.beginPath(); ctx.ellipse(x, sy - hh, 4, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6f9a42'; ctx.beginPath(); ctx.ellipse(x - 2, sy - hh + 1, 2.5, 1.2, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // figuier étrangleur : racines qui enlacent le tronc
+    const fig = Math.min(g.figuier || 0, 8);
+    ctx.strokeStyle = '#8a7a52'; ctx.lineWidth = 1.4;
+    for (let i = 0; i < fig; i++) {
+      const x = tx0 + (tx1 - tx0) * ((i * 0.29 + 0.15) % 1);
+      ctx.beginPath(); ctx.moveTo(x, ty - th); ctx.quadraticCurveTo(x + 7, ty, x - 2, sy + 2); ctx.stroke();
+    }
+    // lianes qui pendent du haut de la planche
+    ctx.strokeStyle = 'rgba(90,130,70,0.7)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 5 + Math.min(fig, 5); i++) {
+      const x = w * ((i * 0.211 + 0.03) % 1), len = sy * (0.25 + (i % 4) * 0.12), sw = Math.sin(t * 0.7 + i) * 3;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.quadraticCurveTo(x + sw, len * 0.6, x + sw * 1.5, len); ctx.stroke();
+    }
+    // fourmis champignonnistes : une file qui porte des miettes de feuilles
+    const ants = Math.min((g.attine || 0) * 2, 24);
+    for (let i = 0; i < ants; i++) {
+      const x = ((t * 14 + i * (w / Math.max(1, ants))) % (w + 20)) - 10;
+      ctx.fillStyle = '#2a1a10'; ctx.fillRect(x, sy - 1.5, 2.2, 1.2);
+      ctx.fillStyle = '#8fbf5a'; ctx.fillRect(x + 0.2, sy - 3.6, 1.8, 1.6);
+    }
+    // lucioles dorées dans l'air humide
+    ctx.fillStyle = '#ffe08a';
+    for (let i = 0; i < 14; i++) {
+      const x = (w * ((i * 0.618) % 1) + Math.sin(t * 0.5 + i) * 18 + w) % w;
+      const y = sy * 0.3 + ((i * 0.37) % 1) * sy * 0.55 + Math.cos(t * 0.8 + i * 2) * 5;
+      ctx.globalAlpha = 0.3 + 0.6 * Math.abs(Math.sin(t * 1.6 + i));
+      ctx.beginPath(); ctx.arc(x, y, 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  },
+});

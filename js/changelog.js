@@ -4,6 +4,23 @@
 // (pas de jargon technique), et la traduire dans le fichier de traduction si besoin.
 const CHANGELOG = [
   {
+    version: '12.0', date: '2026-11-11', title: 'Nouvelles planches',
+    summary: 'Trois biomes à coloniser à côté de la forêt, des épreuves sans fin, des variantes rares dans l’herbier et un prestige de collection. Toujours sans rien remettre à zéro.',
+    added: [
+      'Trois nouvelles planches, colonisées l’une après l’autre en fin de partie : la Tourbière (Pl. II, tourbe), la Forêt alpine (Pl. III, givre) et le Bois mort tropical (Pl. IV, spores rares). Chacune a son paysage, son réseau et ses quatre générateurs, et pousse toute seule, même jeu fermé.',
+      'Un sélecteur au-dessus de la planche pour passer de la forêt aux biomes. Les planches pas encore atteintes s’y montrent en aperçu grisé, avec leur condition.',
+      'Liens racinaires : la ressource de chaque biome achète des bonus permanents, par niveaux et sans limite, qui relient les biomes à la forêt (production, sucre, prospection, spores libérées) ou entre eux.',
+      'Épreuves à niveaux : une épreuve réussie se replante au niveau suivant, avec un objectif plus haut et une petite récompense de plus à chaque niveau.',
+      'Herbier : trois espèces des biomes (Hypholome des sphaignes, Hygrophore de mars, Satyre voilé), et des variantes rares au-delà du niveau 5 (albinos, géante, fasciée), +2 % de production chacune.',
+      'Prestige de collection dans le Carnet : un compteur et des rangs pour le long cours.',
+      '11 jalons de fin de partie.',
+    ],
+    changed: [
+      'L’objectif d’une épreuve est désormais fixé au lancement d’après ta progression, pour durer une vingtaine de minutes à tous les stades : fini les épreuves bouclées en quelques secondes en fin de partie, ou en plusieurs heures au début. Celles que tu as déjà réussies comptent pour le niveau 1.',
+      'Les niveaux d’herbier continuent de monter au-delà de 5 (l’effet de l’espèce reste celui du niveau 5) : la prospection n’attend plus jamais à 100 %.',
+    ],
+  },
+  {
     version: '11.1', date: '2026-11-11', title: 'Correctif des épreuves',
     summary: 'L’épreuve « Sans dents » peut enfin être réussie.',
     fixed: [

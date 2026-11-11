@@ -131,7 +131,21 @@ const ACHIEVEMENTS = [
   // V11 : jalon exclusif des joueurs qui ont sporulé avant la v11 (Héritage des anciennes forêts).
   // exclusive : caché de la liste et du total tant qu'on ne l'a pas.
   { id: 'a_ancient', exclusive: true, check: s => !!(s.legacy && s.legacy.n >= 1) },
+  // V12 : fin de partie
+  { id: 'a_bog', check: s => !!s.plates.tourbiere },
+  { id: 'a_alpine', check: s => !!s.plates.alpine },
+  { id: 'a_tropic', check: s => !!s.plates.tropical },
+  { id: 'a_link1', check: s => linkLevels(s) >= 1 },
+  { id: 'a_link30', check: s => linkLevels(s) >= 30 },
+  { id: 'a_trialL5', check: s => CHALLENGES.some(c => (s.trialLevels[c.id] || 0) >= 5) },
+  { id: 'a_trial25', check: s => trialLevels(s) >= 25 },
+  { id: 'a_variant1', check: s => variantCount(s) >= 1 },
+  { id: 'a_variant15', check: s => variantCount(s) >= 15 },
+  { id: 'a_biomeHerb', check: s => SPECIMENS.filter(x => x.biome).every(x => s.herbarium[x.id] > 0) },
+  { id: 'a_collect', check: (s, g) => g.collectPoints().total >= 1000 },
 ];
+function linkLevels(s) { return LINKS.reduce((n, l) => n + ((s.links && s.links[l.id]) || 0), 0); }
+function trialLevels(s) { return CHALLENGES.reduce((n, c) => n + ((s.trialLevels && s.trialLevels[c.id]) || 0), 0); }
 
 // V11 : sporulation continue. Plus aucune remise à zéro : les spores se libèrent d'elles-mêmes
 // d'après le total produit depuis toujours (stats.allTimeEarned), même hors ligne.
@@ -252,6 +266,68 @@ const CHALLENGES = [
   { id: 'desert', icon: '🏜️', goal: 1e7, rule: { prod: 0.5 } },
   { id: 'amnesia', icon: '🫥', goal: 5e7, rule: { noSpores: true } },
 ];
+// V12 : épreuves à niveaux, sans fin. Une épreuve réussie revient au niveau suivant, objectif ×10.
+// Comme la planche hérite de tous les bonus permanents, l'objectif est ramené dans ce qu'un réseau sans clic
+// produirait sur une planche vide en TRIAL_MIN à TRIAL_MAX secondes (simulation au lancement : Game.trialGoal).
+const TRIAL_LEVEL_MULT = 10;
+const TRIAL_MIN = 20 * 60;
+const TRIAL_MAX = 34 * 60;
+const TRIAL_STEP = 2 * 60;        // chaque niveau vise 2 min de plus (20 min au niveau 1, 34 min dès le niveau 8)
+const TRIAL_LEVEL_BONUS = 0.05;   // chaque niveau au-delà du 1ᵉʳ : +5 % sur le domaine de la récompense
+
+// ---------- V12 : nouvelles planches (biomes) ----------
+// Trois biomes colonisés à côté de la forêt principale, débloqués dans l'ordre, sans aucune remise à zéro.
+// Chacun est une planche (s.plates[id], comme les épreuves) avec sa ressource, ses 4 générateurs et son dessin.
+// Il pousse tout seul, même hors ligne ; sa ressource achète ses générateurs et des liens racinaires (bonus croisés).
+// gens : tier = longueur des filaments dessinés · start : générateurs offerts à la colonisation (sinon rien ne démarre sans clic)
+// unlock : condition (have/need pour la barre d'aperçu)
+const BIOME_START = 5;
+const BIOMES = [
+  { id: 'tourbiere', plate: 'II', res: 'peat', color: '#b58a52',
+    gens: [
+      { id: 'sphaigne', icon: '🌱', color: '#a9c46c', baseCost: 15, baseProd: 0.25, tier: 0 },
+      { id: 'ericoide', icon: '🫐', color: '#b98bb0', baseCost: 400, baseProd: 4, tier: 2 },
+      { id: 'rossolis', icon: '💧', color: '#e0705a', baseCost: 12000, baseProd: 60, tier: 4 },
+      { id: 'butte', icon: '🟫', color: '#c79a62', baseCost: 5e5, baseProd: 1100, tier: 6 },
+    ],
+    unlock: { have: s => (s.gens.gaia || 0), need: 1 } },
+  { id: 'alpine', plate: 'III', res: 'frost', color: '#a9d4f0',
+    gens: [
+      { id: 'neve', icon: '❄️', color: '#dceefa', baseCost: 15, baseProd: 0.25, tier: 0 },
+      { id: 'arolle', icon: '🌲', color: '#7fb39a', baseCost: 400, baseProd: 4, tier: 2 },
+      { id: 'rhodo', icon: '🌺', color: '#e58aa8', baseCost: 12000, baseProd: 60, tier: 4 },
+      { id: 'moraine', icon: '🧊', color: '#9cc6e6', baseCost: 5e5, baseProd: 1100, tier: 6 },
+    ],
+    unlock: { have: s => (s.plates.tourbiere ? s.plates.tourbiere.earned : 0), need: 6e9 } },
+  { id: 'tropical', plate: 'IV', res: 'rare', color: '#e3b45e',
+    gens: [
+      { id: 'souche', icon: '🪵', color: '#d79b5c', baseCost: 15, baseProd: 0.25, tier: 0 },
+      { id: 'figuier', icon: '🌿', color: '#8fcf72', baseCost: 400, baseProd: 4, tier: 2 },
+      { id: 'attine', icon: '🐜', color: '#e8c36a', baseCost: 12000, baseProd: 60, tier: 4 },
+      { id: 'kapok', icon: '🌳', color: '#d0a0e0', baseCost: 5e5, baseProd: 1100, tier: 6 },
+    ],
+    unlock: { have: s => (s.plates.alpine ? s.plates.alpine.earned : 0), need: 2.5e10 } },
+];
+BIOMES.forEach(b => { b.biome = true; b.rule = {}; });
+// La forêt principale nourrit les biomes : ×(1 + BIOME_FOREST × log10(1 + production principale))
+const BIOME_FOREST = 0.08;
+
+// Liens racinaires : achetés avec la ressource d'un biome, par niveaux, sans fin. Bonus croisés permanents.
+// biome : ressource qui paie · cost : prix du niveau 1, ×growth à chaque niveau · per : effet par niveau
+// kind : prod (production principale) · sugar · prospect · spores (spores libérées) · <id de biome> (production de ce biome)
+const LINKS = [
+  { id: 'l_peat_prod', biome: 'tourbiere', icon: '⟡', cost: 1e6, growth: 1.02, kind: 'prod', per: 0.10 },
+  { id: 'l_peat_sugar', biome: 'tourbiere', icon: '⟡', cost: 2e6, growth: 1.02, kind: 'sugar', per: 0.15 },
+  { id: 'l_peat_self', biome: 'tourbiere', icon: '⟡', cost: 200000, growth: 1.02, kind: 'tourbiere', per: 0.25 },
+  { id: 'l_frost_prospect', biome: 'alpine', icon: '⟡', cost: 1.5e6, growth: 1.02, kind: 'prospect', per: 0.10 },
+  { id: 'l_frost_peat', biome: 'alpine', icon: '⟡', cost: 2e6, growth: 1.02, kind: 'tourbiere', per: 0.20 },
+  { id: 'l_frost_self', biome: 'alpine', icon: '⟡', cost: 200000, growth: 1.02, kind: 'alpine', per: 0.25 },
+  { id: 'l_rare_spores', biome: 'tropical', icon: '⟡', cost: 2e6, growth: 1.02, kind: 'spores', per: 0.03 },
+  { id: 'l_rare_frost', biome: 'tropical', icon: '⟡', cost: 2e6, growth: 1.02, kind: 'alpine', per: 0.20 },
+  { id: 'l_rare_self', biome: 'tropical', icon: '⟡', cost: 200000, growth: 1.02, kind: 'tropical', per: 0.25 },
+];
+const LINK_MAX = 999;
+const LINK_POW = 3;   // prix d'un niveau n : cost × n³ × growthⁿ⁻¹
 
 // ---------- V6 : événements ----------
 // Colonie rivale : un autre mycélium envahit la planche. Clique le réseau pour la repousser.
@@ -323,8 +399,30 @@ const SPECIMENS = [
     gens: { continent: 0.2 }, req: 'continent' },
   { id: 'polypore', season: 'hiver', latin: 'Fomitopsis betulina', shape: 'bracket', cap: '#d8cbb0', stem: null,
     gens: { lichen: 0.15, abysses: 0.15, gaia: 0.15 }, req: 'lichen' },
+  // V12 : une espèce par biome, trouvée en toute saison une fois le biome colonisé. Effet : +20 % de sa ressource par niveau.
+  { id: 'hypholome', biome: 'tourbiere', latin: 'Hypholoma elongatum', shape: 'bell', cap: '#c9b35a', stem: '#d8c98e',
+    kind: 'biome', per: 0.2 },
+  { id: 'marzuolus', biome: 'alpine', latin: 'Hygrophorus marzuolus', shape: 'convex', cap: '#5f646c', stem: '#d9dcdc',
+    kind: 'biome', per: 0.2 },
+  { id: 'satyre', biome: 'tropical', latin: 'Phallus indusiatus', shape: 'veil', cap: '#5d4a2c', stem: '#f2eadb',
+    kind: 'biome', per: 0.2 },
 ];
 function herbSpecies(s) { return SPECIMENS.filter(x => s.herbarium && s.herbarium[x.id] > 0).length; }
+// V12 : variantes rares. Au-delà du niveau 5, chaque nouveau spécimen d'une espèce a une petite chance d'être
+// une variante (albinos, géante, fasciée). Chaque variante : +2 % de production et des points de collection.
+// Rythme visé : la première en 2 à 3 h, les 45 en une centaine d'heures (moins avec la Loupe et les liens racinaires).
+const VARIANTS = ['albino', 'giant', 'fasciated'];
+const VARIANT_CHANCE = 0.05;    // divisée par la vitesse de prospection due à la production (Game.prospectSpeed)
+const VARIANT_PROD = 0.02;
+const HERB_LEVEL_CAP = 9999;     // les niveaux continuent de monter au-delà de 5 (effets plafonnés au niveau 5)
+function variantCount(s) {
+  let n = 0;
+  for (const k in (s.variants || {})) n += String(s.variants[k]).length;
+  return n;
+}
+// V12 : prestige de collection (Carnet) : un compteur de long terme, avec des rangs
+const COLLECT_PTS = { herb: 1, variant: 10, trial: 5, link: 2, biome: 25, ach: 1 };
+const COLLECT_RANKS = [0, 60, 150, 300, 600, 1000, 1600, 2500, 4000];
 
 // ---------- V10 : premières pages ----------
 // Notes de terrain : une courte note s'ouvre la 1ʳᵉ fois qu'on rencontre chaque mécanique (textes dans i18n.js).
@@ -352,6 +450,11 @@ const NOTES = [
   // v11
   { id: 'mutation', check: s => s.spores >= 1 },
   { id: 'trial', check: s => s.spores >= TRIAL_UNLOCK },
+  // v12
+  { id: 'trialLevels', check: s => Object.keys(s.challengesDone).length > 0 },
+  { id: 'biome', check: s => BIOMES.some(b => s.plates[b.id]) },
+  { id: 'links', check: s => BIOMES.some(b => s.plates[b.id] && s.plates[b.id].earned >= 200) },
+  { id: 'variant', check: s => variantCount(s) > 0 },
 ];
 
 // Objectifs guidés des premières minutes, affichés un par un sous les ressources, puis plus jamais.

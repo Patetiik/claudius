@@ -13,14 +13,22 @@
     if (o.sugar > 0) rows.push(row(t('wb.sugar'), '+' + fmt(o.sugar, o.sugar < 10 ? 1 : 0), 'main'));
     if (o.spores > 0) rows.push(row(t('wb.spores'), '+' + fmt(o.spores), 'main'));  // v11 : les spores se libèrent aussi hors ligne
     for (const d of o.trials || []) rows.push(row(t('wb.trial', { name: d.name }), t('wb.trialDone'), 'main'));
+    // v12 : les biomes ont poussé, et peut-être un nouveau a été colonisé
+    for (const x of o.biomes || []) rows.push(row(t('wb.biome', { plate: x.def.plate, res: x.def.resName }), '+' + fmt(x.gain), 'main'));
+    for (const b of o.colonized || []) rows.push(row(t('wb.colonized'), t('wb.colonizedVal', { plate: b.plate, name: b.name }), 'main'));
     if (o.found.length || o.prospectTo !== o.prospectFrom) {
       const a = Math.floor(o.prospectFrom * 100), b = Math.floor(o.prospectTo * 100);
       rows.push(row(t('wb.prospect'), o.found.length ? t(o.found.length > 1 ? 'wb.finds' : 'wb.find1', { n: o.found.length }) : t('wb.prospectVal', { a, b }), 'main'));
     }
     // spécimens : un par espèce, avec le niveau atteint
     const sp = new Map();
-    for (const f of o.found) sp.set(f.x.id, { x: f.x, level: f.level, isNew: (sp.get(f.x.id) || f).isNew || f.isNew });
-    const spec = [...sp.values()].map(v => `<li><strong>${v.x.name}</strong> <em>${v.x.latin}</em> · ${v.isNew ? t('wb.newSp') : t('wb.lvl', { l: v.level })}</li>`).join('');
+    for (const f of o.found) {
+      const prev = sp.get(f.x.id);
+      sp.set(f.x.id, { x: f.x, level: f.level, isNew: (prev || f).isNew || f.isNew, vars: [...(prev ? prev.vars : []), ...(f.variant ? [f.variant] : [])] });
+    }
+    // v12 : les variantes rares trouvées pendant l'absence
+    const spec = [...sp.values()].map(v => `<li><strong>${v.x.name}</strong> <em>${v.x.latin}</em> · ${v.isNew ? t('wb.newSp') : t('wb.lvl', { l: v.level })}`
+      + `${v.vars.length ? ' · ' + v.vars.map(x => t('var.' + x)).join(', ') : ''}</li>`).join('');
     UI.queueModal(`<h2>${t('wb.title')}</h2>
       <p>${t('wb.away', { t: fmtTime(o.away) })}${o.away > o.elapsed + 1 ? t('wb.capped', { t: fmtTime(o.elapsed) }) : ''}</p>
       <p class="small">${t('wb.rate', { r })}</p>
@@ -146,22 +154,24 @@
   Game.on('trialStart', () => UI.openPlate());
   Game.on('trialEnd', () => UI.openPlate());
   Game.on('plateGen', ({ id, gid, n }) => {
-    const v = UI.plateView;
-    if (v.plateId !== id) return;
-    const g = GENERATORS.find(x => x.id === gid);
+    const v = [UI.plateView, UI.biomeView].find(x => x.plateId === id);
+    if (!v) return;
+    const g = Game.plateGen(Game.plateDef(id), gid);
     for (let i = 0; i < Math.min(n, 30); i++) if (!v.addBranch(g)) break;
   });
-  Game.on('rival', () => { Network.startRival(Game.s.rival); noteOn('rival'); });
+  // v12 : un biome colonisé ; la colonie rivale ramène la vue sur la forêt (c'est là qu'on la repousse)
+  Game.on('biome', () => UI.update());
+  Game.on('rival', () => { if (UI.biomeSel) UI.selectPlate(null); Network.startRival(Game.s.rival); noteOn('rival'); });
   Game.on('rivalEnd', ({ won }) => { Network.endRival(won); UI.update(); });
   Game.on('flush', n => { UI.spawnFlush(n); noteOn('flush'); });
   Game.on('glow', () => { noteOn('glow'); UI.spawnGlow(); });
   Game.on('specimen', () => {
     if (!$('tab-herbier').classList.contains('active')) UI.herbNew++;
   });
-  Game.on('challengeDone', c => {
+  Game.on('challengeDone', ({ def: c, level }) => {
     UI.log(t('log.chalDone', { name: c.name }));
-    UI.queueModal(`<h2>${t('m.chalDoneTitle')}</h2><p><strong>${c.name}</strong></p>
-      <p>${c.reward}</p><p class="muted small">${t('m.chalContinue')}</p>`);
+    UI.queueModal(`<h2>${t('m.chalLevelTitle', { l: level })}</h2><p><strong>${c.name}</strong></p>
+      <p>${c.reward}${level > 1 ? ' ' + c.levelReward : ''}</p><p class="muted small">${t('m.chalContinue')} ${t('m.chalLevelNext', { n: level + 1 })}</p>`);
     UI.update();
   });
 
@@ -200,11 +210,18 @@
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     Network.update(dt, Game.nps());
-    Network.draw(Game.s, Game.season(), { drought: Game.droughtActive(), sugarRate: Game.sugarRate() });
+    // v12 : la planche affichée est la forêt (Pl. I) ou un biome du sélecteur ; la forêt pousse dans les deux cas
+    const bdef = UI.biomeSel && BIOMES.find(b => b.id === UI.biomeSel);
+    if (bdef) {
+      const bp = Game.plate(bdef.id), bv = UI.biomeView;
+      bv.update(dt, bp ? Game.plateNps(bdef) : 0);
+      bv.draw(PlateView.fakeState(bp, bdef.gens), Game.season(), {});
+    } else Network.draw(Game.s, Game.season(), { drought: Game.droughtActive(), sugarRate: Game.sugarRate() });
     // Planche d'épreuve (v11) : dessinée seulement quand elle est à l'écran
     const def = UI.platePanelVisible() && Game.trial();
     const pv = UI.plateView;
     if (def && pv.plateId === def.id) {
+      PlateView.setBiome(pv, null);
       const p = Game.plate(def.id);
       pv.update(dt, Game.plateNps(def));
       pv.draw(PlateView.fakeState(p), Game.plateSeason(def), { drought: (def.rule.prod || 1) < 1, sugarRate: 0 });
@@ -241,6 +258,7 @@
     UI._guideShown = UI._guideEnd = null;
     Network.rebuild(Game.s);
     UI.openPlate();
+    UI.selectPlate(null);
     UI.upgKey = null;
     UI.achKey = null;
     UI.update();
@@ -251,6 +269,7 @@
     UI.noteQueue = [];
     Network.rebuild(Game.s);
     UI.openPlate();
+    UI.selectPlate(null);
     afterMigration();
     if (Game.s.rival) Network.startRival(Game.s.rival);
     UI.upgKey = null;

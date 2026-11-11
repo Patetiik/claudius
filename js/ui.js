@@ -66,14 +66,15 @@ const UI = {
       const d = el('div', 'chal', `<div class="chal-head"><div class="name"><span class="glyph">${c.icon}</span><span class="tx"></span></div><button type="button"></button></div>
         <div class="desc rule"></div>
         <div class="desc goal"></div>
-        <div class="reward small"></div>`);
+        <div class="reward small"></div>
+        <div class="lvl small"></div>`);
       const btn = d.querySelector('button');
       btn.addEventListener('click', () => {
         if (Game.startTrial(c.id)) { this.openPlate(); this.update(); }
       });
       $('chal-list').appendChild(d);
       this.chalNodes[c.id] = { d, btn, name: d.querySelector('.tx'), rule: d.querySelector('.rule'),
-        goal: d.querySelector('.goal'), reward: d.querySelector('.reward') };
+        goal: d.querySelector('.goal'), reward: d.querySelector('.reward'), lvl: d.querySelector('.lvl') };
     });
     $('btn-abandon').addEventListener('click', () => {
       if (!confirm(t('chal.abandonConfirm'))) return;
@@ -85,6 +86,7 @@ const UI = {
     $('chal-box').addEventListener('click', toPlate);
     $('chal-box').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toPlate(); } });
     this.initPlate();
+    this.initBiomes();
     $('modal-ok').addEventListener('click', () => {
       $('modal').classList.add('hidden');
       const next = this.modalQueue.shift();
@@ -152,6 +154,22 @@ const UI = {
       sec.appendChild(grid);
       $('herb-list').appendChild(sec);
     });
+    // v12 : les espèces des biomes, sur une planche à part
+    {
+      const sec = el('div', 'herb-season', `<div class="herb-season-head"></div>`);
+      this.herbBiomeHead = sec.firstChild;
+      const grid = el('div', 'herb-grid');
+      SPECIMENS.filter(x => x.biome).forEach(x => {
+        const d = el('div', 'specimen', `<div class="plate"></div><div class="sp-text">
+          <div class="name"></div><div class="latin">${x.latin}</div><div class="levels"></div>
+          <div class="desc"></div><div class="unlock"></div></div>`);
+        grid.appendChild(d);
+        this.herbNodes[x.id] = { d, key: '', plate: d.querySelector('.plate'), name: d.querySelector('.name'),
+          levels: d.querySelector('.levels'), desc: d.querySelector('.desc'), unlock: d.querySelector('.unlock') };
+      });
+      sec.appendChild(grid);
+      $('herb-list').appendChild(sec);
+    }
     document.querySelector('.tabs button[data-tab="herbier"]').addEventListener('click', () => { this.herbNew = 0; });
 
     // Export / import
@@ -371,8 +389,7 @@ const UI = {
       n.name.textContent = c.name;
       n.name.parentNode.dataset.done = t('chal.done');
       n.rule.textContent = '⚖️ ' + c.ruleText;
-      n.goal.textContent = t('chal.goal', { n: fmt(c.goal) });
-      n.reward.textContent = '🏆 ' + c.reward;
+      n.goal.textContent = t('chal.goalAdapt');
     }
     for (const br of TALENT_BRANCHES) this.branchNodes[br.id].textContent = br.name;
     for (const x of TALENTS) {
@@ -384,6 +401,8 @@ const UI = {
     for (const u of SUGAR_UPGRADES) { const n = this.sugarNodes[u.id]; n.name.textContent = u.name; n.desc.textContent = u.desc; }
     for (const r of RELICS) { const n = this.relicNodes[r.id]; n.name.textContent = r.name; n.desc.textContent = r.desc; }
     for (const h of this.herbHeads) h.head.innerHTML = `<span>${t('herb.plate', { n: h.n })}</span> — ${seasonLabel(h.se)}`;
+    this.herbBiomeHead.innerHTML = t('herb.biomeHead');
+    this.biomeKey = this.linkKey = this.tabsKey = null;
     document.querySelectorAll('button.help').forEach(b => b.setAttribute('aria-label', t('help.open')));
     if ($('sandbox-tag')) $('sandbox-tag').textContent = t('sandbox.tag', { name: SANDBOX });
     $('fossil-unlock').textContent = fmt(FOSSIL_UNLOCK);
@@ -649,7 +668,7 @@ const UI = {
     const c = Game.trial();
     $('chal-box').classList.toggle('hidden', !c);
     if (c) {
-      const pct = Math.min(100, Game.plate(c.id).earned / c.goal * 100);
+      const pct = Math.min(100, Game.plate(c.id).earned / Game.plateGoal(c) * 100);
       $('chal-name').textContent = t('res.chal', { name: c.name });
       $('chal-pct').textContent = fmt(pct, 1) + pctSign();
       $('chal-bar').style.width = pct + '%';
@@ -724,6 +743,7 @@ const UI = {
     this.updatePrestige();
     this.updateAmber();
     this.updatePlate();
+    this.updateBiomes();
     this.updateHerbarium();
     this.updateStats();
     this.updateGuide();
@@ -741,7 +761,8 @@ const UI = {
     $('herb-badge').classList.toggle('hidden', !this.herbNew);
     $('herb-badge').textContent = this.herbNew;
     if (!$('tab-herbier').classList.contains('active')) return;
-    $('herb-summary').innerHTML = t('herb.summary', { n: nSp, t: SPECIMENS.length, l: Game.herbLevels(), lt: SPECIMENS.length * HERB_MAX_LEVEL, m: fmt(Game.herbMult(), 2) });
+    $('herb-summary').innerHTML = t('herb.summary', { n: nSp, t: SPECIMENS.length, l: Game.herbLevels(), lt: SPECIMENS.length * HERB_MAX_LEVEL, m: fmt(Game.herbMult(), 2) })
+      + (variantCount(s) ? ' · ' + t('var.title').toLowerCase() + ' <strong>' + variantCount(s) + '</strong> / ' + SPECIMENS.length * VARIANTS.length : '');
     $('prospect-bar').style.width = pct + '%';
     const rate = Game.prospectRate();
     const season = seasonLabel(Game.season()).toLowerCase();
@@ -751,19 +772,33 @@ const UI = {
     for (const x of SPECIMENS) {
       const n = this.herbNodes[x.id];
       const lvl = Game.herbLevel(x.id), reqOk = Game.specimenReqMet(x);
-      const key = lvl + '|' + reqOk + '|' + Settings.v.lang;
+      const key = lvl + '|' + reqOk + '|' + (s.variants[x.id] || '') + '|' + Settings.v.lang;
       if (key === n.key) continue;
       n.key = key;
       n.d.className = 'specimen' + (lvl ? ' found' : ' teased') + (lvl >= HERB_MAX_LEVEL ? ' max' : '');
       n.plate.innerHTML = specimenSVG(x, lvl > 0);
       n.name.textContent = x.name;
-      n.levels.innerHTML = lvl ? Array.from({ length: HERB_MAX_LEVEL }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('') : '';
-      const cur = lvl ? t('herb.current', { p: fmt((x.gens ? Object.values(x.gens)[0] : x.per) * lvl * 100) }) : '';
+      // v12 : au-delà du niveau 5, les variantes rares (aperçu grisé tant qu'elles ne sont pas trouvées)
+      const vars = lvl >= HERB_MAX_LEVEL ? `<span class="variants">${VARIANTS.map((v, i) => {
+        const has = Game.hasVariant(x.id, i);
+        return `<span class="variant${has ? ' on' : ''}" title="${t('var.' + v)}${has ? '' : ' · ' + t('var.missing')}">${specimenSVG(x, has, v)}</span>`;
+      }).join('')}</span>` : '';
+      n.levels.innerHTML = lvl ? Array.from({ length: HERB_MAX_LEVEL }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('') + vars : '';
+      const eff = Math.min(lvl, HERB_MAX_LEVEL);
+      const cur = lvl ? t('herb.current', { p: fmt((x.gens ? Object.values(x.gens)[0] : x.per) * eff * 100) }) : '';
       const per = t('herb.perLevel', { effect: x.effect, cur });
       n.desc.textContent = lvl ? `${x.note} ${per}` : per;
+      if (x.biome) {
+        const b = BIOMES.find(y => y.id === x.biome);
+        n.unlock.textContent = lvl > HERB_MAX_LEVEL ? t('herb.beyond', { l: lvl, v: (s.variants[x.id] || '').length, t: VARIANTS.length })
+          : lvl ? (lvl >= HERB_MAX_LEVEL ? t('herb.max') : t('herb.inBiome', { name: b.name }) + ' · ' + t('bio.lvl', { n: lvl }))
+          : reqOk ? t('herb.inBiome', { name: b.name }) : t('herb.needsBiome', { name: b.name });
+        continue;
+      }
       const seasonName = seasonLabel(SEASONS.find(se => se.id === x.season)).toLowerCase();
       const gen = x.req && GENERATORS.find(g => g.id === x.req);
-      n.unlock.textContent = lvl ? (lvl >= HERB_MAX_LEVEL ? t('herb.max') : t('herb.level', { l: lvl, max: HERB_MAX_LEVEL, season: seasonName }))
+      n.unlock.textContent = lvl ? (lvl > HERB_MAX_LEVEL ? t('herb.beyond', { l: lvl, v: (s.variants[x.id] || '').length, t: VARIANTS.length })
+        : lvl >= HERB_MAX_LEVEL ? t('herb.max') : t('herb.level', { l: lvl, max: HERB_MAX_LEVEL, season: seasonName }))
         : t('herb.where', { season: seasonName }) + (reqOk ? '' : t('herb.needs', { gen: gen.name }));
     }
   },
@@ -869,8 +904,17 @@ const UI = {
       const { d, btn } = this.chalNodes[c.id];
       const done = Game.chalDone(c.id), active = running === c;
       d.className = 'chal' + (done ? ' done' : '') + (active ? ' active' : '');
-      btn.textContent = active ? t('chal.running') : done ? t('chal.doneBtn') : t('chal.launch');
-      btn.disabled = active || done || !!running || !chalOn;
+      // v12 : une épreuve réussie se replante au niveau suivant
+      const lv = Game.chalLevel(c.id);
+      btn.textContent = active ? t('chal.running') : done ? t('chal.again', { n: lv + 1 }) : t('chal.launch');
+      btn.disabled = active || !!running || !chalOn;
+      const n = this.chalNodes[c.id], extra = Game.chalExtra(c.id);
+      const key = lv + '|' + Settings.v.lang;
+      if (n.key !== key) {
+        n.key = key;
+        n.reward.textContent = '🏆 ' + c.reward + ' ' + c.levelReward + (extra > 0 ? t('chal.extraNow', { p: fmt(extra * 100) + pctSign() }) : '');
+        n.lvl.textContent = lv ? t('chal.levelLine', { n: lv }) : t('chal.levelNone');
+      }
     }
     $('talent-badge').textContent = buyable;
   },
@@ -920,6 +964,10 @@ const UI = {
       ['st.boars', fmt(st.boars)],
       ['st.species', `${Game.sp().icon} ${Game.sp().name}`],
       ['st.chal', `${Object.keys(Game.s.challengesDone).length} / ${CHALLENGES.length}`],
+      ['st.trialLv', fmt(trialLevels(Game.s))],
+      ['st.biomes', `${BIOMES.filter(b => Game.biomeOpen(b)).length} / ${BIOMES.length}`],
+      ['st.links', fmt(linkLevels(Game.s))],
+      ['st.variants', `${variantCount(Game.s)} / ${SPECIMENS.length * VARIANTS.length}`],
       ['st.droughts', fmt(st.droughts)],
       ['st.rivals', fmt(st.rivals)],
       ['st.flush', fmt(st.flushPicked)],
@@ -935,6 +983,16 @@ const UI = {
     $('stats').innerHTML = rows.map(r => `<tr><td>${t(r[0])}</td><td>${r[1]}</td></tr>`).join('');
     this.updateNotesList();
     this.updateLegacy();
+    this.updateCollect();
+  },
+  // ---------- Prestige de collection (V12) ----------
+  updateCollect() {
+    const c = Game.collectPoints();
+    $('collect-total').innerHTML = t('col.total', { n: fmt(c.total), rank: t('col.rank' + c.rank) });
+    $('collect-bar').style.width = (c.next ? Math.min(100, (c.total - c.prev) / (c.next - c.prev) * 100) : 100) + '%';
+    $('collect-next').textContent = c.next ? t('col.next', { rank: t('col.rank' + (c.rank + 1)), n: fmt(c.next) }) : t('col.top');
+    $('collect-parts').innerHTML = Object.keys(c.parts).map(k =>
+      `<tr><td>${t('col.' + k, { n: fmt(c.parts[k]) })}</td><td>${fmt(c.parts[k] * COLLECT_PTS[k])}</td></tr>`).join('');
   },
 
   // ---------- Héritage des anciennes forêts (V11) ----------
@@ -1005,7 +1063,7 @@ const UI = {
       $('plate-icon').textContent = def.icon;
       $('plate-name').textContent = def.name;
       $('plate-rule').textContent = '⚖️ ' + def.ruleText;
-      $('plate-caption').innerHTML = t('plate.trialCaption', { name: def.name });
+      $('plate-caption').innerHTML = t('plate.trialCaption', { name: def.name, l: p.level || 1 });
       this.plateRows = {};
       $('plate-gens').replaceChildren(...list.map(g => {
         const row = el('button', 'pgen', `<span class="icon">${g.icon}</span><span class="pname"></span><span class="powned"></span><span class="pcost"></span>`);
@@ -1018,9 +1076,9 @@ const UI = {
     const nps = Game.plateNps(def);
     $('plate-nutrients').innerHTML = t('plate.nutrients', { n: fmt(p.nutrients) });
     $('plate-nps').textContent = t('plate.nps', { v: fmt(nps, nps < 100 ? 1 : 0) });
-    const pct = Math.min(1, p.earned / def.goal);
+    const goal = Game.plateGoal(def), pct = Math.min(1, p.earned / goal);
     $('plate-bar').style.width = (pct * 100) + '%';
-    $('plate-goal').textContent = t('plate.goal', { a: fmt(p.earned), b: fmt(def.goal), p: fmt(pct * 100, 1) });
+    $('plate-goal').textContent = t('plate.goal', { a: fmt(p.earned), b: fmt(goal), p: fmt(pct * 100, 1) });
     let mystery = false;
     list.forEach((g, i) => {
       const r = this.plateRows[g.id];
@@ -1048,13 +1106,170 @@ const UI = {
       r.cost.textContent = `${n > 1 ? '×' + n + ' · ' : ''}${fmt(cost)}`;
     });
   },
+
+  // ---------- Nouvelles planches : biomes (V12) ----------
+  // Un sélecteur au-dessus du réseau passe de la forêt (Pl. I) aux biomes. Les biomes pas encore colonisés
+  // restent en aperçu grisé, avec leur condition. La forêt continue de pousser pendant qu'on regarde ailleurs.
+  biomeSel: null,
+  initBiomes() {
+    const tabs = $('plate-tabs');
+    this.plateTabs = {};
+    [null, ...BIOMES].forEach(b => {
+      const btn = el('button', 'pl-tab', `<span class="pl-n">Pl. ${b ? b.plate : 'I'}</span><span class="pl-name"></span>`);
+      btn.type = 'button';
+      btn.setAttribute('role', 'tab');
+      btn.addEventListener('click', () => this.selectPlate(b ? b.id : null));
+      tabs.appendChild(btn);
+      this.plateTabs[b ? b.id : 'forest'] = { btn, name: btn.querySelector('.pl-name') };
+    });
+    this.biomeView = PlateView.make($('biome-canvas'));
+    $('biome-canvas').addEventListener('pointerdown', e => {
+      const def = this.biomeSel && Game.plateDef(this.biomeSel);
+      if (!def || !Game.plate(def.id)) return;
+      const v = Game.clickPlate(def.id);
+      this.biomeView.clickBurst();
+      const r = $('biome-canvas').getBoundingClientRect();
+      this.floater(e.clientX - r.left, e.clientY - r.top, '+' + fmt(v));
+      this.update();
+    });
+    this.linkRows = {};
+    LINKS.forEach(l => {
+      const b = el('button', 'link', `<span class="lname"></span><span class="ldesc"></span><span class="lrow"><span class="llvl"></span><span class="lcost"></span></span>`);
+      b.type = 'button';
+      b.addEventListener('click', () => { if (Game.buyLink(l.id)) this.update(); });
+      $('bio-links').appendChild(b);
+      this.linkRows[l.id] = { b, name: b.querySelector('.lname'), desc: b.querySelector('.ldesc'), lvl: b.querySelector('.llvl'), cost: b.querySelector('.lcost') };
+    });
+  },
+  selectPlate(id) {
+    const def = id ? BIOMES.find(b => b.id === id) : null;
+    this.biomeSel = def ? def.id : null;
+    this.biomeKey = null;
+    this.biomeSeen = this.biomeSeen || {};
+    if (def) this.biomeSeen[def.id] = true;
+    $('network').classList.toggle('hidden', !!def);
+    $('biome-canvas').classList.toggle('hidden', !def);
+    $('main-caption').classList.toggle('hidden', !!def);
+    $('biome-caption').classList.toggle('hidden', !def);
+    document.querySelector('section.left').classList.toggle('biome-on', !!def);
+    if (def) $('hint').style.opacity = 0;
+    else if (Game.s.stats.clicks === 0) $('hint').style.opacity = 1;
+    requestAnimationFrame(() => {
+      if (!def) { Network.resize(); return; }
+      const v = this.biomeView;
+      PlateView.setBiome(v, def);
+      v.resize();
+      v.rebuild(Game.plate(def.id) || { netSeed: 1, netLog: '' });
+      v.plateId = Game.plate(def.id) ? def.id : null;
+    });
+    this.update();
+  },
+  biomeCond(b) {
+    const need = b.unlock.need, have = Math.min(need, b.unlock.have(Game.s));
+    return { text: b.unlockText.replace('{n}', fmt(need)), have, need, pct: Math.min(1, have / need) };
+  },
+  updateBiomes() {
+    const teased = Game.biomesTeased();
+    $('plate-tabs').classList.toggle('hidden', !teased);
+    if (!teased) { if (this.biomeSel) this.selectPlate(null); return; }
+    const tk = BIOMES.map(b => Game.biomeOpen(b)).join() + (this.biomeSel || '') + Settings.v.lang;
+    if (tk !== this.tabsKey) {
+      this.tabsKey = tk;
+      for (const [k, n] of Object.entries(this.plateTabs)) {
+        const b = BIOMES.find(x => x.id === k);
+        n.name.textContent = b ? b.name : t('pl.forest');
+        const open = !b || Game.biomeOpen(b);
+        n.btn.classList.toggle('locked', !open);
+        n.btn.classList.toggle('active', (this.biomeSel || 'forest') === k);
+        n.btn.setAttribute('aria-selected', String((this.biomeSel || 'forest') === k));
+        n.btn.title = open ? '' : t('pl.lockedTitle', { plate: b.plate, name: b.name }) + ' — ' + t('bio.lockedText', { cond: this.biomeCond(b).text });
+      }
+    }
+    for (const b of BIOMES) this.plateTabs[b.id].btn.classList.toggle('fresh', Game.biomeOpen(b) && !(this.biomeSeen && this.biomeSeen[b.id]) && this.biomeSel !== b.id);
+    const def = this.biomeSel && BIOMES.find(b => b.id === this.biomeSel);
+    $('biome-panel').classList.toggle('hidden', !def || !Game.biomeOpen(def));
+    if (!def) { $('biome-lock').classList.add('hidden'); return; }
+    const p = Game.plate(def.id);
+    $('biome-canvas').classList.toggle('greyed', !p);
+    $('biome-lock').classList.toggle('hidden', !!p);
+    if (!p) {
+      const c = this.biomeCond(def);
+      $('biome-caption').innerHTML = t('bio.lockedCaption', { plate: def.plate, name: def.name });
+      $('biome-lock').innerHTML = `<div>${t('bio.lockedText', { cond: c.text })}</div>
+        <div class="progress"><div style="width:${c.pct * 100}%"></div></div><div class="small">${t('bio.lockedProgress', { a: fmt(c.have), b: fmt(c.need) })}</div>`;
+      return;
+    }
+    if (this.biomeView.plateId !== def.id) { PlateView.setBiome(this.biomeView, def); this.biomeView.plateId = def.id; this.biomeView.rebuild(p); }
+    const key = def.id + '|' + Settings.v.lang + Settings.v.numbers;
+    if (key !== this.biomeKey) {
+      this.biomeKey = key;
+      $('biome-caption').innerHTML = t('bio.caption', { plate: def.plate, caption: def.caption });
+      $('bio-hint').textContent = t('bio.hint');
+      $('bio-links-title').textContent = t('bio.links');
+      $('bio-links-intro').textContent = t('bio.linksIntro', { res: def.resName });
+      this.bioRows = {};
+      $('bio-gens').replaceChildren(...def.gens.map(g => {
+        const row = el('button', 'pgen', `<span class="icon">${g.icon}</span><span class="pname"></span><span class="powned"></span><span class="pcost"></span>`);
+        row.type = 'button';
+        row.title = g.desc;
+        row.addEventListener('click', () => { if (Game.buyPlateGen(def.id, g.id, this.buyMode)) this.update(); });
+        this.bioRows[g.id] = { row, name: row.querySelector('.pname'), owned: row.querySelector('.powned'), cost: row.querySelector('.pcost'), icon: row.querySelector('.icon') };
+        return row;
+      }));
+      for (const l of LINKS) {
+        const r = this.linkRows[l.id];
+        r.b.classList.toggle('hidden', l.biome !== def.id);
+        r.name.textContent = l.name;
+        r.desc.textContent = l.desc;
+      }
+    }
+    const nps = Game.plateNps(def);
+    $('bio-res').innerHTML = t('bio.res', { n: fmt(p.nutrients), res: def.resName });
+    $('bio-rate').textContent = t('bio.rate', { v: fmt(nps, nps < 100 ? 1 : 0) });
+    let mystery = false;
+    def.gens.forEach((g, i) => {
+      const r = this.bioRows[g.id];
+      const vis = Game.plateGenVisible(def, i);
+      r.row.classList.toggle('hidden', !vis && mystery);
+      if (!vis) {
+        mystery = true;
+        r.row.classList.add('locked');
+        r.row.disabled = true;
+        r.icon.textContent = '❔';
+        r.name.textContent = '???';
+        r.owned.textContent = '';
+        r.cost.textContent = t('plate.mystery', { n: fmt(g.baseCost * 0.4) });
+        return;
+      }
+      r.row.classList.remove('locked');
+      r.icon.textContent = g.icon;
+      r.name.textContent = g.name;
+      const n = this.buyMode === 'max' ? Math.max(1, Game.plateMaxAffordable(def, g.id)) : this.buyMode;
+      const cost = Game.plateCost(def, g.id, n);
+      const can = cost <= p.nutrients;
+      r.row.disabled = !can;
+      r.row.classList.toggle('affordable', can);
+      r.owned.textContent = p.gens[g.id] || 0;
+      r.cost.textContent = `${n > 1 ? '×' + n + ' · ' : ''}${fmt(cost)}`;
+    });
+    for (const l of LINKS) {
+      if (l.biome !== def.id) continue;
+      const r = this.linkRows[l.id], st = Game.linkState(l), lv = Game.linkLevel(l.id);
+      r.b.disabled = st !== 'buyable';
+      r.b.classList.toggle('affordable', st === 'buyable');
+      r.lvl.textContent = t('bio.lvl', { n: lv }) + (lv ? ' · ' + t('bio.now', { v: '×' + fmt(1 + l.per * lv, 2) }) : '');
+      r.cost.textContent = st === 'max' ? t('bio.max') : t('bio.cost', { n: fmt(Game.linkCost(l)), res: '' }).trim();
+    }
+  },
 };
 
 // Planche d'herbier (V9) : un dessin à la plume par forme de champignon.
 // found = false : silhouette grisée, pour l'aperçu des espèces pas encore trouvées.
-function specimenSVG(x, found) {
-  const cap = found ? x.cap : 'rgba(236,226,207,.10)';
-  const stem = found ? (x.stem || x.cap) : 'rgba(236,226,207,.07)';
+// variant (v12) : 'albino' (sans pigment), 'giant' (plus grande), 'fasciated' (deux chapeaux soudés)
+function specimenSVG(x, found, variant) {
+  const pale = found && variant === 'albino';
+  const cap = found ? (pale ? '#f1ece2' : x.cap) : 'rgba(236,226,207,.10)';
+  const stem = found ? (pale ? '#f7f3ea' : (x.stem || x.cap)) : 'rgba(236,226,207,.07)';
   const line = found ? 'rgba(20,14,9,.55)' : 'rgba(236,226,207,.28)';
   const dash = found ? '' : ' stroke-dasharray="2 2"';
   const st = `stroke="${line}" stroke-width="1"${dash}`;
@@ -1106,6 +1321,13 @@ function specimenSVG(x, found) {
         <path d="M22 34 Q40 44 58 34 M20 50 Q40 58 60 50 M30 22 Q36 44 30 66 M50 22 Q44 44 50 66 M40 20 L40 68" stroke="${cap}" stroke-width="3" fill="none"${dash}/>
         <ellipse cx="40" cy="69" rx="10" ry="2.5" fill="${found ? '#ece2cf' : 'none'}" ${st}/>`;
       break;
+    case 'veil':   // v12 : Satyre voilé, chapeau sombre et dentelle blanche jusqu'au sol
+      body = `<path d="M37 70 L43 70 L42 30 L38 30 Z" fill="${stem}" ${st}/>
+        <path d="M26 36 Q40 52 54 36 L60 66 Q40 74 20 66 Z" fill="${found ? 'rgba(242,234,219,.55)' : 'none'}" ${st}/>
+        <path d="M26 44 L54 44 M23 54 L57 54 M21 63 L59 63 M30 38 L26 66 M36 41 L34 70 M44 41 L46 70 M50 38 L54 66" stroke="${found ? 'rgba(90,74,44,.45)' : ink}" stroke-width=".7" fill="none"/>
+        <path d="M31 33 Q31 14 40 12 Q49 14 49 33 Q40 37 31 33 Z" fill="${cap}" ${st}/>
+        <circle cx="40" cy="13.5" r="2" fill="${found ? '#f2eadb' : 'none'}" ${st}/>`;
+      break;
     case 'bracket':
       body = `<path d="M58 6 L72 6 L72 74 L58 74 Z" fill="${found ? '#3b3027' : 'none'}" ${st}/>
         <path d="M62 14 l6 0 M61 30 l8 0 M62 66 l5 0" stroke="${found ? 'rgba(236,226,207,.35)' : ink}" stroke-width="1"/>
@@ -1115,5 +1337,7 @@ function specimenSVG(x, found) {
       break;
   }
   const defs = x.glow ? `<defs><radialGradient id="glow-${x.id}"><stop offset="0" stop-color="#c8eca8" stop-opacity=".55"/><stop offset="1" stop-color="#c8eca8" stop-opacity="0"/></radialGradient></defs>` : '';
+  if (variant === 'giant') body = `<g transform="translate(40 70) scale(1.16 1.2) translate(-40 -70)">${body}</g>`;
+  else if (variant === 'fasciated') body = `<g transform="translate(29 70) scale(.72) translate(-40 -70)">${body}</g><g transform="translate(51 70) scale(.8) translate(-40 -70)">${body}</g>`;
   return `<svg viewBox="0 0 80 80" aria-hidden="true">${defs}<path d="M6 70.5 L74 70.5" stroke="rgba(236,226,207,.25)" stroke-width="1"/>${body}</svg>`;
 }

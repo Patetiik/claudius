@@ -17,6 +17,8 @@ ou servir le dossier : `python3 -m http.server 8765 --bind 127.0.0.1`.
 - **Évolutions** : ×2/×3 par générateur, clic en % de la prod, bonus globaux.
 - **Jalons** (43) : +2 % de production chacun.
 - **Sporulation continue** (v11, plus aucune remise à zéro) : spores = 1,25 × (total produit depuis toujours / 1 M)^¼, libérées toutes seules (même hors ligne), +5 % chacune. Avant la v11 : prestige avec remise à zéro, (total du cycle / 1 M)^¼.
+- **Nouvelles planches** (v12) : 3 biomes à côté de la forêt (Tourbière, Forêt alpine, Bois mort tropical), avec leur ressource,
+  leurs générateurs et des **liens racinaires** sans fin ; **épreuves à niveaux** sans fin, réglées pour durer une vingtaine de minutes.
 - Sauvegarde auto (localStorage, 10 s) + gains hors-ligne (50 %, 8 h max).
 
 ## Nouveautés v2
@@ -250,6 +252,45 @@ Plus aucune remise à zéro : refonte du cœur du jeu, testée au simulateur et 
   continental 0 h 50, Noosphère 1 h 09 ; v11 : 0 h 21, 0 h 34 (sans remise à zéro, il ne reconstruit plus son réseau). En puissance 0,30,
   la boucle s’emballait déjà ; le plafond arrête la course vers 10⁶ spores (5 × 10⁶ en v10.1 à 30 h).
 
+## Nouveautés v12 — nouvelles planches
+Une fin de partie qui ne s'arrête plus, sans aucune remise à zéro (cahier des charges : ligne v12 de la feuille de route).
+- **Trois biomes** colonisés l'un après l'autre à côté de la forêt (Pl. I) : **Tourbière** (Pl. II, tourbe) dès la 1ʳᵉ noosphère
+  fongique, **Forêt alpine** (Pl. III, givre) à 6 Md de tourbe produits, **Bois mort tropical** (Pl. IV, spores rares) à 25 Md de givre.
+  Chacun est une planche (`s.plates[id]`, le modèle des épreuves de la v11 : `BIOMES` dans `data.js`, `Game.plateDef`, `cleanPlates`) avec
+  sa ressource, 4 générateurs à lui (`gens` du biome, lettres a–d dans le journal du dessin), sa surface dessinée (`drawBog`, `drawAlpine`,
+  `drawTropical` dans `network.js`, sol propre `BIOME_SOIL`) et son réseau déterministe. Il démarre avec 5 générateurs offerts, pousse tout
+  seul, hors ligne compris (au taux hors ligne), et la Croissance autonome y achète aussi. La forêt le nourrit : ×(1 + 0,08 × log₁₀ de la
+  production principale). Ce qu'il produit ne compte pas pour les spores.
+- **Sélecteur de planches** au-dessus du réseau (dès le 1ᵉʳ ambre ou lichen) : Pl. I Forêt, puis les biomes ; ceux pas encore atteints en
+  **aperçu grisé** avec leur condition et une barre de progression. Sous la planche d'un biome : sa ressource (« ? » détaillé), ses
+  générateurs et ses liens. La forêt continue de pousser ; une colonie rivale ramène la vue sur la forêt.
+- **Liens racinaires** (`LINKS`, 3 par biome), achetés avec la ressource du biome, par niveaux sans limite, prix polynomial
+  (prix × n³ × 1,02ⁿ⁻¹, `LINK_POW`) : production principale +10 %/niv., sucre +15 %, prospection +10 %, spores libérées +3 %, et la
+  production des biomes eux-mêmes ou de leurs voisins (+20 à +25 %).
+- **Épreuves à niveaux, sans fin** : une épreuve réussie se replante au niveau suivant. Objectif nominal ×10 par niveau, ramené au
+  lancement (`Game.trialGoal`, simulation rapide de la planche vide avec tous les bonus du moment) entre ce qu'un réseau sans clic produirait
+  en 20 min (+2 min par niveau) et en 34 min. Chaque niveau au-delà du 1ᵉʳ : +5 % sur le domaine de la récompense (Sans dents : production ;
+  Filament solitaire : les 3 générateurs ; Hiver éternel : production en hiver ; Désert : sucre ; Sans mémoire : +0,05 % par spore).
+  Les épreuves déjà réussies comptent pour le niveau 1 ; une épreuve en cours garde son objectif.
+- **Herbier** : 3 espèces de biome (Hypholome des sphaignes, Hygrophore de mars, Satyre voilé), en toute saison une fois le biome colonisé,
+  +20 % de la ressource du biome par niveau. Les niveaux continuent au-delà de 5 (effets plafonnés au niveau 5) : la prospection ne s'arrête
+  plus. Au-delà du niveau 5, chaque trouvaille peut être une **variante rare** (albinos, géante, fasciée : vignettes grisées tant qu'on ne les
+  a pas), +2 % de production chacune ; chance de 5 % divisée par la vitesse due à la production, soit environ une variante toutes les 2 h 30
+  de prospection à tous les stades (plus avec la Loupe et le lien « Sentiers de givre »).
+- **Prestige de collection** (Carnet) : herbier 1 pt/niveau, variante 10, niveau d'épreuve 5, niveau de lien 2, biome 25, jalon 1 ;
+  9 rangs, de Promeneur à Mémoire de la forêt. **11 jalons** de fin de partie (54 en tout).
+- Notes de terrain « Épreuves à niveaux », « Nouvelle planche », « Liens racinaires », « Variante rare » ; « Bon retour » détaille la
+  production des biomes, les planches colonisées et les variantes trouvées ; relevés du Carnet ; textes FR/EN complets.
+- Sauvegarde v10 (codes `CLAUDIUS10:…`) : champs `trialLevels`, `links`, `variants` ; planches de biome dans `plates`. Les parties et codes
+  v1 à v11 se chargent tels quels (`.claude/outils/saves.js`).
+- **Équilibrage** (outils non publiés dans `.claude/outils/`) :
+  - `trials.js` (5 épreuves × 3 profils × niveaux 1 à 5) : 20 à 40 min partout, qu'on touche la planche 5 min ou 1 min
+    (avant : 53 min à 4 h 34 pour un débutant, 1 à 10 s… ou 10 min en fin de partie).
+  - `biomes.js` (fin de partie, production principale 10²⁶/s) : joueur actif, Forêt alpine à 3 h 25, Bois mort à 10 h 40, 50 niveaux de liens
+    à 8 h, 182 à 40 h, 250 à 80 h (production principale ×3,7, spores libérées ×1,57 : pas d'emballement) ; avec seulement la Croissance
+    autonome, 4 h 10 et 12 h ; en passant 3 fois par jour, 24 h et 64 h.
+  - `sim.js` : rythme du jeu principal inchangé (Noosphère à 4 h 58 pour le joueur peu actif).
+
 ## Publier une mise à jour
 1. Modifier le jeu, le tester en local sur `http://127.0.0.1:8765/?sandbox=test`.
 2. Changer le numéro de version (sinon les joueurs peuvent garder l’ancienne version en cache) :
@@ -264,7 +305,7 @@ Plus aucune remise à zéro : refonte du cœur du jeu, testée au simulateur et 
 - `js/data.js` — tout le contenu chiffré (générateurs, saisons, évolutions, jalons, courbe des spores, talents, sucre, événements, planches d’épreuve, ambre et reliques, herbier, notes de terrain et objectifs guidés) : c'est ici qu'on ajoute.
 - `js/i18n.js` — tous les textes, en français et en anglais (v10) : chaque ajout de contenu y met ses textes dans les deux langues.
 - `js/game.js` — logique pure et sauvegarde.
-- `js/network.js` — rendu canvas du réseau, grande fructification, spore dorée, vues de planches (`PlateView`).
+- `js/network.js` — rendu canvas du réseau, grande fructification, spore dorée, vues de planches (`PlateView`), surfaces des biomes (v12).
 - `js/ui.js`, `js/main.js` — interface et boucles ; `js/help.js` — aide contextuelle (« ? » et infobulles, v10).
 - `js/util.js` — bac à sable, réglages du joueur, format des nombres.
 - `index.html` — page unique ; à chaque version, lancer `./nouvelle-version.sh` (voir ci-dessus).
@@ -281,5 +322,5 @@ Plus aucune remise à zéro : refonte du cœur du jeu, testée au simulateur et 
 - ~~v9 : herbier (collection cumulative de 12 espèces, prospection automatique même hors ligne, lueurs dans la litière, relique Loupe de naturaliste).~~ ✅
 - ~~v10 « Premières pages » : accueil des nouveaux joueurs — notes de carnet à la 1ʳᵉ rencontre de chaque mécanique (relisibles dans le Carnet), objectifs guidés des 5 premières minutes, « ? » et infobulles détaillant chaque valeur, réglages (animations réduites, taille du texte, contraste, format des nombres, langue FR/EN), équilibrage des 30 premières minutes, fenêtre « Bon retour » détaillée.~~ ✅
 - ~~v11 « Sporulation continue » : plus aucune remise à zéro — les spores se libèrent en continu d’après le total produit depuis toujours (courbe ≈ racine 4ᵉ, plafond de sécurité ; étude au simulateur : rythme comparable à l’actuel), grande fructification visuelle à chaque palier ; mutation d’espèce à tout moment (1 par saison) ; défis transformés en planches d’épreuve parallèles ; remplacement des bonus de début de cycle (Germination rapide, Banque de graines, Sève fossile) ; sucre et évolutions sucrées permanents (prix revus) ; migration sans perte des parties existantes ; **compensation des joueurs qui ont déjà sporulé** (« Héritage des anciennes forêts » : +2 % de production permanente par sporulation passée, plafonné à +100 %, jalon exclusif « Ancien des forêts », titre « Pionnier de la sporulation » dans le Carnet, spore dorée au cœur du réseau) avec une note de carnet chaleureuse à la première ouverture qui les remercie comme pionniers.~~ ✅
-- v12 (prévu) « Nouvelles planches » : 3 biomes colonisés en parallèle de la forêt principale, sur la base des planches d’épreuve de la v11 (Tourbière → tourbe, Forêt alpine → givre, Bois mort tropical → spores rares), 4 générateurs et une surface propres chacun, production continue et hors ligne, liens racinaires (bonus croisés), sélecteur de planches avec aperçus grisés, +3 espèces d’herbier.
+- ~~v12 « Nouvelles planches » : 3 biomes colonisés en parallèle de la forêt principale, sur la base des planches d’épreuve de la v11 (Tourbière → tourbe, Forêt alpine → givre, Bois mort tropical → spores rares), 4 générateurs et une surface propres chacun, production continue et hors ligne, liens racinaires (bonus croisés), sélecteur de planches avec aperçus grisés, +3 espèces d’herbier. Élargie (2026-11-11, Nicolas a fini 100 % du jeu) : **épreuves à niveaux sans fin** (objectif ×10 par niveau, petite récompense cumulative par niveau, objectif adapté à la progression pour viser 20–40 min par épreuve, car en v11 elles se règlent en 9 s en fin de partie) ; **variantes rares** d’herbier (albinos, géantes) au-delà du niveau 5 ; jalons de fin de partie et compteur de « prestige de collection » dans le Carnet.~~ ✅
 - v13 (prévu) « Ambiance et partage » : paysage sonore Web Audio par saison et météo (désactivé par défaut, coupé en arrière-plan), fiche « Partager ma planche » en image (partage natif ou PNG, sans serveur), cycle jour/nuit selon l’heure réelle, petite faune décorative.
