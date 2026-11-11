@@ -476,27 +476,13 @@ const Network = {
     const dry = !!env.drought;
     const ground = this.GROUND[id];
 
-    // Ciel en dégradé, plus chaud pendant une sécheresse
-    const [top, bottom] = dry ? ['#3c2a18', '#c08a42'] : this.SKY[id];
-    const sky = ctx.createLinearGradient(0, 0, 0, sy);
-    sky.addColorStop(0, top);
-    sky.addColorStop(1, bottom);
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, w, sy);
-
-    // Astre : lune pâle, ou soleil écrasant pendant la sécheresse
-    const ax = w * 0.86, ay = sy * 0.3;
-    const glow = ctx.createRadialGradient(ax, ay, 0, ax, ay, sy * 0.45);
-    glow.addColorStop(0, dry ? 'rgba(255,220,120,0.9)' : 'rgba(240,236,220,0.75)');
-    glow.addColorStop(0.18, dry ? 'rgba(255,200,90,0.5)' : 'rgba(240,236,220,0.25)');
-    glow.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(ax - sy, 0, sy * 2, sy);
+    // Ciel en dégradé, plus chaud pendant une sécheresse ; v13 : jour, nuit, aube et crépuscule selon l'heure réelle
+    this.drawSky(dry ? ['#3c2a18', '#c08a42'] : this.SKY[id], dry ? 'drought' : id, sy, { dry });
 
     // Aurore (V6) : la noosphère fait onduler le ciel
     const gaia = state.gens.gaia || 0;
     if (gaia > 0) {
-      const a = Math.min(1, 0.3 + gaia / 25);
+      const a = Math.min(1, 0.3 + gaia / 25) * (1 - 0.8 * Sky.get().day);   // v13 : à peine visible en plein jour
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       for (let b = 0; b < 3; b++) {
@@ -599,16 +585,18 @@ const Network = {
     }
 
     // Lucioles (bois lumineux)
-    const flies = Math.min(state.gens.lumi * 2, 30);
+    const flies = Math.min(state.gens.lumi * 2, 30), flyK = 1 - 0.6 * Sky.get().day;   // v13 : moins visibles en plein jour
     ctx.fillStyle = '#c6ff9e';
     for (let i = 0; i < flies; i++) {
       const x = (w * ((i * 0.618) % 1) + Math.sin(t * 0.7 + i) * 20 + w) % w;
       const y = sy * 0.2 + ((i * 0.37) % 1) * sy * 0.6 + Math.cos(t + i * 2) * 6;
-      ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + i));
+      ctx.globalAlpha = (0.4 + 0.6 * Math.abs(Math.sin(t * 2 + i))) * flyK;
       ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
 
+    this.drawFauna(id, sy, t, { rain: env.rain, dry });   // v13 : petite faune décorative
+    this.drawDaylight(sy);
     this.drawWeather(id, dry, sy, t);
     this.drawFruits(sy);
   },
@@ -815,18 +803,14 @@ const BIOME_SOIL = {
 Object.assign(Network, {
   drawBiomeSurface(state, env) {
     const { ctx, w } = this, sy = this.surfaceY(), t = this.clock(), g = state.gens, id = this.biome.id;
-    const sky = ctx.createLinearGradient(0, 0, 0, sy);
-    const [a, b] = { tourbiere: ['#10161a', '#2a3226'], alpine: ['#0a1020', '#283954'], tropical: ['#0b1613', '#22402f'] }[id];
-    sky.addColorStop(0, a); sky.addColorStop(1, b);
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, w, sy);
-    // lune, plus pâle et plus haute en montagne
-    const ax = w * (id === 'alpine' ? 0.18 : 0.84), ay = sy * (id === 'alpine' ? 0.22 : 0.3);
-    const glow = ctx.createRadialGradient(ax, ay, 0, ax, ay, sy * 0.45);
-    glow.addColorStop(0, 'rgba(240,236,220,0.7)'); glow.addColorStop(0.18, 'rgba(240,236,220,0.22)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = glow; ctx.fillRect(ax - sy, 0, sy * 2, sy);
+    const night = { tourbiere: ['#10161a', '#2a3226'], alpine: ['#0a1020', '#283954'], tropical: ['#0b1613', '#22402f'] }[id];
+    // lune plus haute en montagne ; l'alpage a déjà ses étoiles
+    this.drawSky(night, id, sy, id === 'alpine' ? { moonX: 0.18, moonY: 0.22, noStars: true } : {});
     if (id === 'tourbiere') this.drawBog(g, sy, t);
     else if (id === 'alpine') this.drawAlpine(g, sy, t);
     else this.drawTropical(g, sy, t);
+    this.drawFauna(id, sy, t);   // v13
+    this.drawDaylight(sy);
   },
   // Sol : un trait d'horizon et une couche qui s'estompe vers le réseau
   drawGround(sy, top, line) {
@@ -907,24 +891,25 @@ Object.assign(Network, {
     }
     ctx.restore();
   },
+  // Sommets en dents de scie (onde triangulaire), avec un peu de relief ; v13 : partagé avec le chamois qui y marche
+  ridgeY(x, k, amp, sy) {
+    const u = (x / (this.w * 0.22) + k) % 2, tri = 1 - Math.abs(u - 1);
+    return sy - sy * amp * (0.35 + 0.55 * tri * (0.75 + 0.25 * Math.sin(x * 0.05 + k * 3)) + 0.04 * Math.sin(x * 0.31));
+  },
   // Forêt alpine : étoiles, sommets enneigés, pins arolles, rhododendrons, blocs de moraine, neige qui tombe
   drawAlpine(g, sy, t) {
     const ctx = this.ctx, w = this.w;
-    const rng = seededRng(41);
-    for (let i = 0; i < 40; i++) {
+    const rng = seededRng(41), S = Sky.get(), starK = S.on ? S.night : 1;   // v13 : étoiles la nuit seulement
+    for (let i = 0; i < 40 && starK > 0.02; i++) {
       const x = rng() * w, y = rng() * sy * 0.6;
-      ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 0.8 + i * 1.7));
+      ctx.globalAlpha = starK * (0.3 + 0.5 * Math.abs(Math.sin(t * 0.8 + i * 1.7)));
       ctx.fillStyle = '#e8eefc'; ctx.fillRect(x, y, 1, 1);
     }
     ctx.globalAlpha = 1;
     const ridge = (k, amp, col) => {
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.moveTo(0, sy);
-      // sommets en dents de scie (onde triangulaire), avec un peu de relief
-      for (let x = 0; x <= w; x += 6) {
-        const u = (x / (w * 0.22) + k) % 2, tri = 1 - Math.abs(u - 1);
-        ctx.lineTo(x, sy - sy * amp * (0.35 + 0.55 * tri * (0.75 + 0.25 * Math.sin(x * 0.05 + k * 3)) + 0.04 * Math.sin(x * 0.31)));
-      }
+      for (let x = 0; x <= w; x += 6) ctx.lineTo(x, this.ridgeY(x, k, amp, sy));
       ctx.lineTo(w, sy); ctx.fill();
     };
     ridge(1.3, 0.7, '#1b2538');

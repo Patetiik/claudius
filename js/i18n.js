@@ -242,7 +242,7 @@ I18N.fr = {
 
   ui: {
     'doc.title': 'Claudius · Journal d’un mycélium',
-    'top.tagline': 'Journal d’un mycélium · v12',
+    'top.tagline': 'Journal d’un mycélium · v13',
     'top.save': 'Sauver', 'top.saveTitle': 'Sauvegarder la partie',
     'top.reset': 'Effacer', 'top.resetTitle': 'Effacer la partie',
     'res.nutrients': 'nutriments', 'res.sugar': 'sucre', 'res.amber': 'ambre', 'res.spores': 'spores',
@@ -447,6 +447,22 @@ I18N.fr = {
     'set.text': 'Taille du texte', 'set.text0': 'Normale', 'set.text1': 'Grande', 'set.text2': 'Très grande',
     'set.contrast': 'Contraste renforcé',
     'set.numbers': 'Format des nombres', 'set.suffix': 'Suffixes ({ex})', 'set.sci': 'Scientifique ({ex})',
+    // v13 : ambiance et partage
+    'set.sound': 'Son', 'set.volume': 'Volume', 'set.vol0': 'Doux', 'set.vol1': 'Moyen', 'set.vol2': 'Fort',
+    'set.sky': 'Ciel', 'set.skyReal': 'Selon l’heure réelle', 'set.skyNight': 'Toujours la nuit',
+    'set.fauna': 'Petite faune',
+    'share.button': 'Partager ma planche',
+    'share.title': 'Partager ma planche',
+    'share.intro': 'Une fiche de carnet faite à l’instant, avec la planche affichée et quelques relevés.',
+    'share.alt': 'Fiche de la planche : le réseau, l’espèce et les relevés',
+    'share.native': 'Partager', 'share.download': 'Télécharger l’image',
+    'share.privacy': 'Rien de personnel ni de ta sauvegarde dans l’image : seulement ce qui s’y voit.',
+    'share.text': 'Mon réseau dans Claudius, un jeu idle de mycélium :',
+    'share.fail': 'L’image n’a pas pu être créée sur ce navigateur.',
+    'share.subtitle': 'Journal d’un mycélium',
+    'share.species': 'Espèce', 'share.prod': 'Production', 'share.spores': 'Spores', 'share.amber': 'Ambre',
+    'share.biomes': 'Biomes colonisés', 'share.herb': 'Herbier', 'share.collect': 'Prestige de collection',
+    'share.foot': 'Joue aussi, dans le navigateur :',
     // v10 : notes de version (le contenu français est dans js/changelog.js, l'anglais plus bas dans ce fichier)
     'news.title': 'Nouveautés de la version {v}', 'news.open': 'Tout l’historique', 'news.close': 'Fermer les nouveautés',
     'cl.title': 'Notes de version', 'cl.intro': 'Ce qui a changé à chaque version du jeu, la plus récente en premier.',
@@ -559,6 +575,7 @@ I18N.fr = {
     'help.biomeForest': 'Nourri par la forêt principale', 'help.biomeLinks': 'Liens racinaires', 'help.biomeHerb': 'Herbier (espèce du biome)',
     'help.biomeBody': 'La ressource de cette planche. Elle pousse toute seule, même jeu fermé, et achète ses générateurs et ses liens racinaires.',
     'help.biomeTotal': 'Produit depuis toujours',
+    'help.biomeNps': 'Ce que cette planche produit chaque seconde ({res}), y compris tes clics des 5 dernières secondes.',
   },
 };
 
@@ -750,6 +767,17 @@ I18N.en = {
     },
     // v10 : notes de version en anglais (le français est dans js/changelog.js), par numéro de version
     changelog: {
+      '13.0': { title: 'Ambience and sharing',
+        summary: 'The sky follows your time of day, small animals pass on the surface, a soundscape you can switch on, and a card to share your plate.',
+        added: [
+          'Day and night: the sky over the forest and the biomes follows your device’s clock, with dawn, dusk and stars at night. It is only visual: production doesn’t change. In Notebook → Settings, “Always night” brings back the old sky.',
+          'Small wildlife: a woodlouse, a snail, a butterfly, bats at dusk, a robin on the snow, a frog in the peat bog, a marmot and a chamois in the mountains… There is nothing to catch: they are only part of the scenery. You can hide them in the settings.',
+          'Soundscape: wind, rain, cicadas, birds, frogs, depending on the season, the weather and the time of day, and small sounds when you click, buy, release a spore or watch a great fruiting. It starts switched off: turn it on in Notebook → Settings, with its volume. It goes quiet as soon as you leave the tab.',
+          'Share my plate (under the plate): a notebook card as an image, with your network, your species, a few readings, the date and the game’s address. Send it straight from your phone, or download it. It contains nothing personal and nothing from your save.',
+       ],
+        changed: [
+          'The big counter at the top left follows the plate on screen: on a colonised biome it shows that biome’s resource (peat, frost or rare spores) and its production per second, with its own “?”. Back on the forest, it shows nutrients again.',
+        ] },
       '12.1': { title: 'Clearer plates',
         summary: 'Biomes now show in place of the forest in the Network tab, and their thresholds are written out in words.',
         changed: [
@@ -943,7 +971,7 @@ I18N.en = {
 
   ui: {
     'doc.title': 'Claudius · A mycelium’s journal',
-    'top.tagline': 'A mycelium’s journal · v12',
+    'top.tagline': 'A mycelium’s journal · v13',
     'top.save': 'Save', 'top.saveTitle': 'Save the game',
     'top.reset': 'Erase', 'top.resetTitle': 'Erase the game',
     'res.nutrients': 'nutrients', 'res.sugar': 'sugar', 'res.amber': 'amber', 'res.spores': 'spores',
@@ -1142,6 +1170,22 @@ I18N.en = {
     'set.text': 'Text size', 'set.text0': 'Normal', 'set.text1': 'Large', 'set.text2': 'Extra large',
     'set.contrast': 'High contrast',
     'set.numbers': 'Number format', 'set.suffix': 'Suffixes ({ex})', 'set.sci': 'Scientific ({ex})',
+    // v13: ambience and sharing
+    'set.sound': 'Sound', 'set.volume': 'Volume', 'set.vol0': 'Soft', 'set.vol1': 'Medium', 'set.vol2': 'Loud',
+    'set.sky': 'Sky', 'set.skyReal': 'Follows the real time', 'set.skyNight': 'Always night',
+    'set.fauna': 'Small wildlife',
+    'share.button': 'Share my plate',
+    'share.title': 'Share my plate',
+    'share.intro': 'A notebook card made just now, with the plate on screen and a few readings.',
+    'share.alt': 'Plate card: the network, the species and the readings',
+    'share.native': 'Share', 'share.download': 'Download the image',
+    'share.privacy': 'Nothing personal and nothing from your save in the image: only what you can see on it.',
+    'share.text': 'My network in Claudius, an idle mycelium game:',
+    'share.fail': 'The image could not be created in this browser.',
+    'share.subtitle': 'A mycelium’s journal',
+    'share.species': 'Species', 'share.prod': 'Production', 'share.spores': 'Spores', 'share.amber': 'Amber',
+    'share.biomes': 'Biomes colonised', 'share.herb': 'Herbarium', 'share.collect': 'Collection prestige',
+    'share.foot': 'Play too, in your browser:',
     'news.title': 'What’s new in version {v}', 'news.open': 'Full history', 'news.close': 'Close the news',
     'cl.title': 'Release notes', 'cl.intro': 'What changed in each version of the game, most recent first.',
     'cl.open': 'See the history', 'cl.current': 'Version {v}',
@@ -1251,6 +1295,7 @@ I18N.en = {
     'help.biomeForest': 'Fed by the main forest', 'help.biomeLinks': 'Root links', 'help.biomeHerb': 'Herbarium (biome species)',
     'help.biomeBody': 'This plate’s resource. It grows on its own, even with the game closed, and buys its generators and root links.',
     'help.biomeTotal': 'Produced all time',
+    'help.biomeNps': 'What this plate produces each second ({res}), including your clicks over the last 5 seconds.',
   },
 };
 

@@ -243,6 +243,16 @@ const HELP = {
         + tipH(t('help.sources')) + tipRows(src) + tipH(t('help.mults')) + tipRows(rows),
     };
   },
+  // v13 : la ligne /s du compteur de gauche quand un biome est affiché
+  biomeNps() {
+    const def = UI.biomeSel && Game.plateDef(UI.biomeSel), p = def && Game.plate(def.id);
+    if (!p) return null;
+    const b = HELP.biome(), pass = Game.plateNps(def), act = UI.bioActiveRate(def.id);
+    let html = tipP(t('help.biomeNps', { res: def.resName }));
+    if (act > 0) html += tipRows([tipRow(t('help.passive'), rate(pass)), tipRow(t('help.active'), rate(act)),
+      tipRow(t('help.shown'), rate(pass + act), 'total')]);
+    return { title: t('help.npsTitle'), html: html + b.html.slice(b.html.indexOf('<div class="tip-h">')) };
+  },
   buff(a) {
     const b = Game.s.buffs[Number(a.dataset.buff)];
     if (!b) return null;

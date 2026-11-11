@@ -291,6 +291,39 @@ Une fin de partie qui ne s'arrête plus, sans aucune remise à zéro (cahier des
     autonome, 4 h 10 et 12 h ; en passant 3 fois par jour, 24 h et 64 h.
   - `sim.js` : rythme du jeu principal inchangé (Noosphère à 4 h 58 pour le joueur peu actif).
 
+## Nouveautés v13 — ambiance et partage
+Tout est décoratif : rien ne touche à la production ni à la sauvegarde. Le code est dans `js/ambiance.js` (chargé après `network.js`).
+- **Cycle jour/nuit** (`Sky`) d'après l'heure de l'appareil : la durée du jour suit la date (≈ 9 h en décembre, 16 h en juin,
+  latitude tempérée), midi solaire vers 12 h 45 (+1 h à l'heure d'été, détectée avec `getTimezoneOffset`). `Network.drawSky` mélange
+  les ciels de nuit d'origine (`Network.SKY`, ciels des biomes) avec des ciels de jour sobres (`Sky.DAY`), une teinte d'aube et de
+  crépuscule, le soleil qui traverse le ciel, la lune et 34 étoiles la nuit ; l'aurore de la noosphère et les lucioles du bois lumineux
+  pâlissent le jour ; `drawDaylight` pose une lumière très légère sur la surface. Le sous-sol (le réseau) n'est pas touché.
+  Réglage « Ciel » : selon l'heure réelle (par défaut) ou « Toujours la nuit » (`Sky.OFF`, la planche exacte d'avant la v13).
+  Pour tester une heure : `Sky.debugHour = 21` dans la console (bac à sable).
+- **Petite faune** (`Network.drawFauna`, `bug…`) : cloporte, escargot (plus souvent sous la pluie), papillon le jour, chauves-souris au
+  crépuscule, rouge-gorge sur la neige, lucioles pâles les nuits d'été, grenouille et libellule à la tourbière, chamois sur la crête et
+  marmotte en alpine, morpho et gecko au bois mort tropical. Petites, mates, sans lueur ni emoji, dessinées dans le canvas : rien à
+  cliquer (un clic sur la planche reste un clic sur le réseau), donc impossible à confondre avec les gouttes, le sanglier, les carpophores
+  et les lueurs, qui sont des objets lumineux posés par-dessus. Leurs passages suivent l'horloge du décor (figés en animations réduites).
+  Réglage « Petite faune ».
+- **Paysage sonore** (`Sound`), entièrement synthétisé en Web Audio (aucun fichier, aucune requête) : vent (bruit rose filtré qui
+  « respire »), pluie (pendant une ondée ou un orage), cigales (été, sécheresse), nappe très basse accordée à la saison ou au biome, et des
+  sons épars (oiseaux, grillons, chouette, feuilles, grenouilles, gouttes, carillon de givre). Sons du jeu : clic, achat (seulement juste
+  après un geste du joueur : les achats automatiques restent muets), spore (au plus toutes les 12 s), grande fructification.
+  **Coupé par défaut** ; réglages « Son » et « Volume » (doux, moyen, fort). L'`AudioContext` ne naît qu'au clic sur « Oui » ou au
+  premier geste sur la page si le son est déjà activé (exigence d'iOS, avec un son vide de déverrouillage) ; il est suspendu dès que
+  l'onglet passe en arrière-plan (`visibilitychange`, `pagehide`) et quand la partie est reprise dans un autre onglet. En animations
+  réduites : pas de souffle du vent, fructification plus courte et sans nuée.
+- **Partager ma planche** (`Share`, bouton sous la planche) : une fiche PNG 1080 × 1350 faite en canvas dans le navigateur — la planche
+  affichée (forêt ou biome colonisé ; le bouton se cache sur un aperçu grisé), sa légende, l'espèce, production, spores, ambre, biomes
+  colonisés, herbier, prestige de collection, la date et l'adresse du jeu. Aperçu dans une fenêtre, puis partage natif
+  (`navigator.share` avec fichier, appelé pendant le clic pour Safari) ou téléchargement. Aucune donnée personnelle ni rien de la
+  sauvegarde brute.
+- Réglages : `sound` (faux), `volume` (1), `sky` (vrai), `fauna` (vrai), rangés avec les autres réglages du joueur (hors sauvegarde).
+- **Compteur de gauche selon la planche affichée** (`UI.updateCounter`) : sur un biome colonisé, la ressource du biome, `Game.plateNps`
+  et la part des clics des 5 dernières secondes (`UI.bioClicks`, affichage seulement), libellé et aides « ? » `biome` / `biomeNps` ;
+  la ligne de ressource du panneau du biome (onglet Réseau) est masquée pour éviter le doublon, l'indice « Touche la planche… » reste.
+
 ## Publier une mise à jour
 1. Modifier le jeu, le tester en local sur `http://127.0.0.1:8765/?sandbox=test`.
 2. Changer le numéro de version (sinon les joueurs peuvent garder l’ancienne version en cache) :
@@ -306,6 +339,7 @@ Une fin de partie qui ne s'arrête plus, sans aucune remise à zéro (cahier des
 - `js/i18n.js` — tous les textes, en français et en anglais (v10) : chaque ajout de contenu y met ses textes dans les deux langues.
 - `js/game.js` — logique pure et sauvegarde.
 - `js/network.js` — rendu canvas du réseau, grande fructification, spore dorée, vues de planches (`PlateView`), surfaces des biomes (v12).
+- `js/ambiance.js` — ciel jour/nuit, petite faune, paysage sonore et fiche « Partager ma planche » (v13).
 - `js/ui.js`, `js/main.js` — interface et boucles ; `js/help.js` — aide contextuelle (« ? » et infobulles, v10).
 - `js/util.js` — bac à sable, réglages du joueur, format des nombres.
 - `index.html` — page unique ; à chaque version, lancer `./nouvelle-version.sh` (voir ci-dessus).
@@ -323,4 +357,4 @@ Une fin de partie qui ne s'arrête plus, sans aucune remise à zéro (cahier des
 - ~~v10 « Premières pages » : accueil des nouveaux joueurs — notes de carnet à la 1ʳᵉ rencontre de chaque mécanique (relisibles dans le Carnet), objectifs guidés des 5 premières minutes, « ? » et infobulles détaillant chaque valeur, réglages (animations réduites, taille du texte, contraste, format des nombres, langue FR/EN), équilibrage des 30 premières minutes, fenêtre « Bon retour » détaillée.~~ ✅
 - ~~v11 « Sporulation continue » : plus aucune remise à zéro — les spores se libèrent en continu d’après le total produit depuis toujours (courbe ≈ racine 4ᵉ, plafond de sécurité ; étude au simulateur : rythme comparable à l’actuel), grande fructification visuelle à chaque palier ; mutation d’espèce à tout moment (1 par saison) ; défis transformés en planches d’épreuve parallèles ; remplacement des bonus de début de cycle (Germination rapide, Banque de graines, Sève fossile) ; sucre et évolutions sucrées permanents (prix revus) ; migration sans perte des parties existantes ; **compensation des joueurs qui ont déjà sporulé** (« Héritage des anciennes forêts » : +2 % de production permanente par sporulation passée, plafonné à +100 %, jalon exclusif « Ancien des forêts », titre « Pionnier de la sporulation » dans le Carnet, spore dorée au cœur du réseau) avec une note de carnet chaleureuse à la première ouverture qui les remercie comme pionniers.~~ ✅
 - ~~v12 « Nouvelles planches » : 3 biomes colonisés en parallèle de la forêt principale, sur la base des planches d’épreuve de la v11 (Tourbière → tourbe, Forêt alpine → givre, Bois mort tropical → spores rares), 4 générateurs et une surface propres chacun, production continue et hors ligne, liens racinaires (bonus croisés), sélecteur de planches avec aperçus grisés, +3 espèces d’herbier. Élargie (2026-11-11, Nicolas a fini 100 % du jeu) : **épreuves à niveaux sans fin** (objectif ×10 par niveau, petite récompense cumulative par niveau, objectif adapté à la progression pour viser 20–40 min par épreuve, car en v11 elles se règlent en 9 s en fin de partie) ; **variantes rares** d’herbier (albinos, géantes) au-delà du niveau 5 ; jalons de fin de partie et compteur de « prestige de collection » dans le Carnet.~~ ✅
-- v13 (prévu) « Ambiance et partage » : paysage sonore Web Audio par saison et météo (désactivé par défaut, coupé en arrière-plan), fiche « Partager ma planche » en image (partage natif ou PNG, sans serveur), cycle jour/nuit selon l’heure réelle, petite faune décorative.
+- ~~v13 « Ambiance et partage » : paysage sonore Web Audio par saison et météo (désactivé par défaut, coupé en arrière-plan), fiche « Partager ma planche » en image (partage natif ou PNG, sans serveur), cycle jour/nuit selon l’heure réelle, petite faune décorative.~~ ✅

@@ -231,7 +231,7 @@ const UI = {
     if (this.modalOpen()) this.modalQueue.push(html); else this.modal(html);
   },
   modal(html) {
-    document.querySelector('.modal-box').classList.remove('cl-open', 'legacy-open');
+    document.querySelector('.modal-box').classList.remove('cl-open', 'legacy-open', 'share-open');
     $('modal-content').innerHTML = html;
     $('modal').classList.remove('hidden');
     Help.close();
@@ -458,6 +458,11 @@ const UI = {
       ['text', t('set.text'), [[0, t('set.text0')], [1, t('set.text1')], [2, t('set.text2')]]],
       ['contrast', t('set.contrast'), [[false, t('set.off')], [true, t('set.on')]]],
       ['numbers', t('set.numbers'), [['suffix', t('set.suffix', { ex: ex1 })], ['sci', t('set.sci', { ex: ex2 })]]],
+      // v13 : ambiance
+      ['sound', t('set.sound'), [[false, t('set.off')], [true, t('set.on')]]],
+      ...(v.sound ? [['volume', t('set.volume'), [[0, t('set.vol0')], [1, t('set.vol1')], [2, t('set.vol2')]]]] : []),
+      ['sky', t('set.sky'), [[true, t('set.skyReal')], [false, t('set.skyNight')]]],
+      ['fauna', t('set.fauna'), [[true, t('set.on')], [false, t('set.off')]]],
     ];
     const box = $('settings');
     box.replaceChildren(...rows.map(([k, label, opts]) => {
@@ -495,6 +500,7 @@ const UI = {
     h.style.setProperty('--fs', TEXT_SIZES[Settings.v.text]);
     h.classList.toggle('text-big', Settings.v.text > 0);
     Network.reduced = reduced;
+    if (changed === 'sound' || changed === 'volume') Sound.apply();   // v13 : appelé pendant le clic, un geste du joueur
     if (changed === 'lang') $('log').replaceChildren();  // le journal repart dans la nouvelle langue
     if (changed === 'lang' || changed === 'numbers') {
       applyContentText();
@@ -613,14 +619,42 @@ const UI = {
     $('guide-bar').style.width = (i / GUIDE.length * 100 + have / g.n / GUIDE.length * 100) + '%';
   },
 
-  update() {
-    const s = Game.s;
-    const nps = Game.nps();
-    $('nutrients').textContent = fmt(s.nutrients);
-    // /s affiché : production passive + revenu des clics et cueillettes des 5 dernières secondes (v10.1)
-    const act = Game.activeRate(), shown = nps + act;
+  // Grand compteur de la colonne de gauche : il suit la planche affichée (v13) — les nutriments de la forêt,
+  // ou la ressource d'un biome colonisé (tourbe, givre, spores rares), avec son aide « ? » et son libellé
+  bioClicks: [],
+  bioActiveRate(id) {
+    const from = Date.now() - Game.ACTIVE_WINDOW * 1000;
+    this.bioClicks = this.bioClicks.filter(e => e[0] >= from);
+    return this.bioClicks.reduce((a, e) => a + (e[2] === id ? e[1] : 0), 0) / Game.ACTIVE_WINDOW;
+  },
+  updateCounter() {
+    const bdef = this.biomeSel && BIOMES.find(b => b.id === this.biomeSel), bp = bdef && Game.plate(bdef.id);
+    let val, nps, act, label;
+    if (bp) {
+      val = bp.nutrients; nps = Game.plateNps(bdef); act = this.bioActiveRate(bdef.id); label = bdef.resName;
+    } else {
+      // /s affiché : production passive + revenu des clics et cueillettes des 5 dernières secondes (v10.1)
+      val = Game.s.nutrients; nps = Game.nps(); act = Game.activeRate(); label = t('res.nutrients');
+    }
+    const shown = nps + act;
+    $('nutrients').textContent = fmt(val);
     $('nps').textContent = fmt(shown, shown < 100 ? 1 : 0);
     $('nps-click').textContent = act > 0 && act >= shown * 0.01 ? t('res.clickRate', { v: fmt(act, act < 100 ? 1 : 0) }) : '';
+    const key = bp ? bdef.id : 'forest';
+    if (key + Settings.v.lang !== this._counterKey) {
+      this._counterKey = key + Settings.v.lang;
+      const lab = document.querySelector('.res-label [data-i18n="res.nutrients"]');
+      lab.textContent = label;
+      const hv = bp ? 'biome' : 'nutrients', hr = bp ? 'biomeNps' : 'nps';
+      for (const e of [$('nutrients'), document.querySelector('.res-label'), document.querySelector('.res-label .help')]) e.dataset.help = hv;
+      for (const e of [document.querySelector('.res-rate'), document.querySelector('.res-rate .help')]) e.dataset.help = hr;
+      document.querySelector('.res-main').classList.toggle('biome-counter', !!bp);
+    }
+  },
+
+  update() {
+    const s = Game.s;
+    this.updateCounter();
 
     // Spores
     $('spores-box').classList.toggle('hidden', s.spores <= 0);
@@ -1027,6 +1061,7 @@ const UI = {
       if (!def) return;
       const v = Game.clickPlate(def.id);
       this.plateView.clickBurst();
+      Sound.click();
       const r = $('plate-canvas').getBoundingClientRect();
       const f = el('div', 'floater', def.rule.noClick ? '0' : '+' + fmt(v));
       f.style.left = (e.clientX - r.left - 20) + 'px';
@@ -1127,7 +1162,9 @@ const UI = {
       const def = this.biomeSel && Game.plateDef(this.biomeSel);
       if (!def || !Game.plate(def.id)) return;
       const v = Game.clickPlate(def.id);
+      this.bioClicks.push([Date.now(), v, def.id]);   // v13 : pour le /s du compteur de gauche
       this.biomeView.clickBurst();
+      Sound.click();
       const r = $('biome-canvas').getBoundingClientRect();
       this.floater(e.clientX - r.left, e.clientY - r.top, '+' + fmt(v));
       this.update();
@@ -1193,6 +1230,7 @@ const UI = {
     const bioOn = !!def && Game.biomeOpen(def);
     $('biome-panel').classList.toggle('hidden', !bioOn);
     $('gen-list').classList.toggle('hidden', bioOn);
+    $('btn-share').classList.toggle('hidden', !!def && !Game.plate(def.id));   // v13 : pas de fiche pour un aperçu grisé
     if (!def) { $('biome-lock').classList.add('hidden'); return; }
     const p = Game.plate(def.id);
     $('biome-canvas').classList.toggle('greyed', !p);

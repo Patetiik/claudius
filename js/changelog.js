@@ -4,6 +4,19 @@
 // (pas de jargon technique), et la traduire dans le fichier de traduction si besoin.
 const CHANGELOG = [
   {
+    version: '13.0', date: '2026-11-11', title: 'Ambiance et partage',
+    summary: 'Le ciel suit ton heure, de petites bêtes passent à la surface, un paysage sonore à activer, et une fiche pour partager ta planche.',
+    added: [
+      'Jour et nuit : le ciel de la forêt et des biomes suit l’heure de ton appareil, avec l’aube, le crépuscule et les étoiles la nuit. C’est seulement visuel, la production ne change pas. Dans le Carnet → Réglages, « Toujours la nuit » remet le ciel d’avant.',
+      'Petite faune : un cloporte, un escargot, un papillon, des chauves-souris au crépuscule, un rouge-gorge sur la neige, une grenouille dans la tourbière, une marmotte et un chamois en montagne… Il n’y a rien à attraper : ces bêtes sont là pour le décor. Tu peux les masquer dans les réglages.',
+      'Paysage sonore : le vent, la pluie, les cigales, les oiseaux, les grenouilles, selon la saison, la météo et l’heure, et de petits sons quand tu cliques, achètes, libères une spore ou vois une grande fructification. Il est coupé au départ : active-le dans le Carnet → Réglages, avec son volume. Il se tait dès que tu quittes l’onglet.',
+      'Partager ma planche (sous la planche) : une fiche de carnet en image, avec ton réseau, ton espèce, quelques relevés, la date et l’adresse du jeu. Tu peux l’envoyer directement depuis ton téléphone, ou la télécharger. Elle ne contient rien de personnel ni de ta sauvegarde.',
+    ],
+    changed: [
+      'Le grand compteur en haut à gauche suit la planche affichée : sur un biome colonisé, il montre sa ressource (tourbe, givre ou spores rares) et sa production par seconde, avec son propre « ? ». De retour sur la forêt, il montre de nouveau les nutriments.',
+    ],
+  },
+  {
     version: '12.1', date: '2026-11-11', title: 'Des planches plus claires',
     summary: 'Les biomes s’affichent à la place de la forêt dans l’onglet Réseau, et leurs seuils s’écrivent en toutes lettres.',
     changed: [

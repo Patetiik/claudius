@@ -14,7 +14,8 @@ const SANDBOX = (() => {
 const SETTINGS_KEY = 'claudius-settings-v1' + (SANDBOX ? ':sandbox:' + SANDBOX : '');
 const TEXT_SIZES = [1, 1.15, 1.3];
 const Settings = {
-  v: { lang: null, motion: 'auto', text: 0, contrast: false, numbers: 'suffix', seen: null },  // seen : dernière version dont on a vu les nouveautés
+  // seen : dernière version dont on a vu les nouveautés ; v13 : son (coupé par défaut), volume, cycle jour/nuit, petite faune
+  v: { lang: null, motion: 'auto', text: 0, contrast: false, numbers: 'suffix', seen: null, sound: false, volume: 1, sky: true, fauna: true },
   load() {
     let d = null;
     try { d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch (e) { /* illisible : valeurs par défaut */ }
@@ -24,6 +25,10 @@ const Settings = {
       if ([0, 1, 2].includes(d.text)) this.v.text = d.text;
       this.v.contrast = d.contrast === true;
       if (d.numbers === 'sci' || d.numbers === 'suffix') this.v.numbers = d.numbers;
+      this.v.sound = d.sound === true;
+      if ([0, 1, 2].includes(d.volume)) this.v.volume = d.volume;
+      this.v.sky = d.sky !== false;
+      this.v.fauna = d.fauna !== false;
       if (typeof d.seen === 'string' && /^[\d.]{1,12}$/.test(d.seen)) this.v.seen = d.seen;
     }
     if (!this.v.lang) { this.v.lang = this.defaultLang(); this.save(); }

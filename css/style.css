@@ -753,3 +753,11 @@ html.reduce-motion .note-card, html.reduce-motion .guide-bar i, html.reduce-moti
 .chal .lvl { color: var(--accent2); margin-top: 2px; }
 .collect-total { margin: 6px 0 4px; font: calc(15px * var(--fs)) var(--serif); }
 #collect-bar { height: 100%; width: 0; background: var(--accent2); }
+
+/* ---------- v13 : ambiance et partage ---------- */
+.plate-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 10px 5px 0; }
+.plate-foot .plate-caption { margin: 0; min-width: 0; }
+.share-btn { flex: none; padding: 4px 6px; font-size: calc(10px * var(--fs)); letter-spacing: .08em; white-space: nowrap; }
+.modal-box.share-open { max-width: 520px; }
+.share-preview { display: block; width: auto; max-width: min(100%, 360px); max-height: 56vh; margin: 10px auto; border: 1px solid var(--rule2); box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }
+.share-actions { justify-content: center; }

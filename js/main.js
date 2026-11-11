@@ -40,6 +40,7 @@
   const canvas = $('network');
   Network.init(canvas);
   UI.init();
+  Sound.init();   // v13 : paysage sonore (coupé par défaut, ne démarre qu'après un geste du joueur)
 
   const offline = Game.load();
   if (offline && offline.found) UI.herbNew = offline.found.length;
@@ -127,6 +128,7 @@
   canvas.addEventListener('pointerdown', e => {
     const v = Game.click();
     Network.clickBurst();
+    Sound.click();
     const r = canvas.getBoundingClientRect();
     UI.floater(e.clientX - r.left, e.clientY - r.top, '+' + fmt(v));
     $('hint').style.opacity = 0;
@@ -204,19 +206,24 @@
   }, 1000);
 
   // Rendu
+  // v12 : la planche affichée est la forêt (Pl. I) ou un biome du sélecteur ; la forêt pousse dans les deux cas
+  // v13 : aussi appelé par la fiche « Partager ma planche », pour une image à jour même si aucune image n'a encore été dessinée
+  function drawShown() {
+    const bdef = UI.biomeSel && BIOMES.find(b => b.id === UI.biomeSel);
+    if (bdef) UI.biomeView.draw(PlateView.fakeState(Game.plate(bdef.id), bdef.gens), Game.season(), {});
+    else Network.draw(Game.s, Game.season(), { drought: Game.droughtActive(), sugarRate: Game.sugarRate(),
+      rain: Game.s.buffs.some(b => b.lk === 'buff.shower' || b.lk === 'buff.storm') });
+  }
+  Share.redraw = drawShown;
   let lastFrame = performance.now();
   function frame(now) {
     requestAnimationFrame(frame);  // d'abord : une erreur de dessin ne doit jamais figer la planche
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
     lastFrame = now;
     Network.update(dt, Game.nps());
-    // v12 : la planche affichée est la forêt (Pl. I) ou un biome du sélecteur ; la forêt pousse dans les deux cas
     const bdef = UI.biomeSel && BIOMES.find(b => b.id === UI.biomeSel);
-    if (bdef) {
-      const bp = Game.plate(bdef.id), bv = UI.biomeView;
-      bv.update(dt, bp ? Game.plateNps(bdef) : 0);
-      bv.draw(PlateView.fakeState(bp, bdef.gens), Game.season(), {});
-    } else Network.draw(Game.s, Game.season(), { drought: Game.droughtActive(), sugarRate: Game.sugarRate() });
+    if (bdef) UI.biomeView.update(dt, Game.plate(bdef.id) ? Game.plateNps(bdef) : 0);
+    drawShown();
     // Planche d'épreuve (v11) : dessinée seulement quand elle est à l'écran
     const def = UI.platePanelVisible() && Game.trial();
     const pv = UI.plateView;
@@ -249,6 +256,7 @@
     const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     if (navigator.storage && navigator.storage.persist && (installed || navigator.userAgentData)) navigator.storage.persist().catch(() => {});
   } catch (e) { /* rien */ }
+  $('btn-share').addEventListener('click', () => Share.open());   // v13 : fiche « Partager ma planche »
   $('btn-save').addEventListener('click', () => { UI.log(Game.save() ? t('log.saved') : t('log.saveFailed')); });
   $('btn-reset').addEventListener('click', () => {
     if (!confirm(t('m.resetConfirm'))) return;
